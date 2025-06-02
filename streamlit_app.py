@@ -31,103 +31,126 @@ def add_runs_from_text(paragraph, text_line, app_inputs):
             if is_underline: run.underline = True
             run.font.name = 'Arial'; run.font.size = Pt(11)
 
-# --- Ramsdens Color Palette (approximations) ---
-RAMSDENS_NAVY = "#003366"  # A common navy blue, adjust if a more specific one is found
-RAMSDENS_TEAL = "#008080"  # A standard teal, adjust
-RAMSDENS_LIGHT_GREY_BG = "#022933" # Light grey for secondary background
-RAMSDENS_TEXT_COLOR = "#333333" # Dark grey for text
-RAMSDENS_WHITE = "#FFFFFF"
+# --- New Color Palette ---
+MAIN_BG = "#022933"
+MAIN_TEXT = "#FFFFFF"
+INPUT_FIELD_BG = "#D3D3D3" # LightGray for the actual input part
+INPUT_WIDGET_AREA_BG = "#4A6D7C" # A slightly lighter, desaturated version of main for widget area
+INPUT_LABEL_TEXT = "#FFFFFF" # White labels for inputs
+BUTTON_BG = "#98FB98"      # PaleGreen
+BUTTON_TEXT = "#FFFFFF"    # White
+SIDEBAR_BG = "#033b4a"     # Slightly lighter than main BG for sidebar
 
 # --- Streamlit Page Configuration ---
 st.set_page_config(
     layout="wide",
     page_title="Ramsdens Client Care Letter Generator",
-    page_icon="https://www.ramsdens.co.uk/wp-content/themes/ramsdens/favicon.ico" # Favicon from their site
+    page_icon="https://www.ramsdens.co.uk/wp-content/themes/ramsdens/favicon.ico"
 )
 
-# --- Custom CSS for Ramsdens Styling ---
+# --- Custom CSS for New Styling ---
 st.markdown(f"""
 <style>
-    /* Main background color */
+    /* Main app background and text color */
     .stApp {{
-        background-color: {RAMSDENS_WHITE};
+        background-color: {MAIN_BG};
+        color: {MAIN_TEXT};
+    }}
+    body, p, .stMarkdown {{ /* Ensure general text inherits correctly */
+        color: {MAIN_TEXT};
+        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
     }}
 
     /* Sidebar styling */
     .stSidebar {{
-        background-color: {RAMSDENS_LIGHT_GREY_BG};
+        background-color: {SIDEBAR_BG};
     }}
     .stSidebar .st-emotion-cache-16txtl3 {{ /* Sidebar header */
-        color: {RAMSDENS_NAVY};
+        color: {MAIN_TEXT}; /* White sidebar header text */
     }}
-     .stSidebar .st-emotion-cache-ue6h4r p {{ /* Sidebar text input labels */
-        color: {RAMSDENS_TEXT_COLOR};
+    .stSidebar .st-emotion-cache-ue6h4r p, /* Sidebar input labels */
+    .stSidebar label {{ /* More general label targeting in sidebar */
+        color: {INPUT_LABEL_TEXT} !important; /* White labels in sidebar */
     }}
-
-
-    /* Primary button styling (Generate button) */
-    .stButton>button {{
-        background-color: {RAMSDENS_NAVY};
-        color: {RAMSDENS_WHITE};
-        border: 2px solid {RAMSDENS_NAVY};
-        border-radius: 5px;
-        padding: 10px 20px;
+    /* Sidebar input field backgrounds and text */
+    .stSidebar .stTextInput input,
+    .stSidebar .stDateInput input,
+    .stSidebar .stSelectbox div[data-baseweb="select"] > div:first-child {{
+        background-color: {INPUT_FIELD_BG} !important;
+        color: #000000 !important; /* Black text in input fields for readability */
+        border: 1px solid {SIDEBAR_BG};
     }}
-    .stButton>button:hover {{
-        background-color: {RAMSDENS_TEAL};
-        color: {RAMSDENS_WHITE};
-        border: 2px solid {RAMSDENS_TEAL};
+     .stSidebar .stRadio div[role="radiogroup"] > label {{
+        background-color: transparent; /* Ensure radio options background is not overridden badly */
     }}
-    
-    /* Download button - often needs specific targeting if default button class is overridden */
-    div[data-testid="stDownloadButton"] button {{
-        background-color: {RAMSDENS_TEAL};
-        color: {RAMSDENS_WHITE};
-        border: 2px solid {RAMSDENS_TEAL};
-        border-radius: 5px;
-        padding: 10px 20px;
-    }}
-    div[data-testid="stDownloadButton"] button:hover {{
-        background-color: {RAMSDENS_NAVY};
-        color: {RAMSDENS_WHITE};
-        border: 2px solid {RAMSDENS_NAVY};
+    .stSidebar .stRadio label span {{ /* Text for radio button options */
+         color: {INPUT_LABEL_TEXT} !important;
     }}
 
 
-    /* Headers in the main app area */
-    h1, .st-emotion-cache-10trblm {{ /* Main title and st.title */
-        color: {RAMSDENS_NAVY};
-        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; /* Example sans-serif */
+    /* Main content headers */
+    h1, .st-emotion-cache-10trblm {{
+        color: {MAIN_TEXT}; /* White title */
     }}
-    h2, .st-emotion-cache-s8k1j8 {{ /* st.header */
-        color: {RAMSDENS_NAVY};
-        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-        margin-top: 20px;
-        border-bottom: 2px solid {RAMSDENS_TEAL};
+    h2, .st-emotion-cache-s8k1j8 {{
+        color: {MAIN_TEXT}; /* White headers */
+        border-bottom: 2px solid {BUTTON_BG}; /* Pale green underline for headers */
         padding-bottom: 5px;
     }}
-     h3 {{ /* st.subheader - if used */
-        color: {RAMSDENS_TEAL};
-        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+
+    /* Input widget labels in main area */
+    .main .stTextInput label, 
+    .main .stTextArea label, 
+    .main .stDateInput label, 
+    .main .stSelectbox label, 
+    .main .stRadio label {{
+        color: {INPUT_LABEL_TEXT} !important; /* White labels */
+        font-weight: bold;
     }}
 
-    /* Text input and text area labels */
-    .stTextInput label, .stTextArea label, .stDateInput label, .stSelectbox label, .stRadio label {{
-        color: {RAMSDENS_TEXT_COLOR} !important; /* Use !important if needed to override Streamlit defaults */
-         font-weight: bold;
+    /* Styling for the actual input fields in main area - "Question Boxes" */
+    .main .stTextInput input,
+    .main .stTextArea textarea,
+    .main .stDateInput input,
+    .main .stSelectbox div[data-baseweb="select"] > div:first-child {{
+        background-color: {INPUT_FIELD_BG} !important; /* Light gray background for field */
+        color: #000000 !important; /* Black text in input field for readability */
+        border: 1px solid {MAIN_BG}; /* Border to match main bg or a subtle one */
+        border-radius: 3px;
+    }}
+     .main .stRadio div[role="radiogroup"] > label {{ /* Radio button options wrapper */
+        background-color: transparent; /* Make background of radio option transparent */
+        padding: 5px;
+        margin-bottom: 5px;
+        border-radius: 3px;
+    }}
+    .main .stRadio label span {{ /* Text for radio button options */
+         color: {INPUT_LABEL_TEXT} !important;
+    }}
+
+
+    /* Button styling (Generate and Download) */
+    .stButton>button, div[data-testid="stDownloadButton"] button {{
+        background-color: {BUTTON_BG} !important;
+        color: {BUTTON_TEXT} !important;
+        border: 1px solid {BUTTON_BG} !important;
+        border-radius: 5px;
+        padding: 12px 24px !important; /* Increased padding */
+        font-size: 1.1em !important;    /* Larger text */
+        font-weight: bold !important;
+        text-transform: uppercase !important; /* BLOCK CAPITALS */
+    }}
+    .stButton>button:hover, div[data-testid="stDownloadButton"] button:hover {{
+        background-color: #87CEEB !important; /* SkyBlue - or a slightly darker green for hover */
+        color: {BUTTON_TEXT} !important;
+        border: 1px solid #87CEEB !important;
     }}
     
-    /* General text color */
-    body, p, .stMarkdown, .stAlert {{
-        color: {RAMSDENS_TEXT_COLOR};
-        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    }}
-
-    /* Styling for success messages */
+    /* Success message styling */
     .stAlert[data-baseweb="alert"] div[role="alert"] {{
-        background-color: #e6f7ff; /* A light blue, can be adjusted */
-        color: {RAMSDENS_NAVY};
-        border: 1px solid {RAMSDENS_TEAL};
+        background-color: {SIDEBAR_BG}; /* Use sidebar bg for alert */
+        color: {MAIN_TEXT}; /* White text for alert */
+        border: 1px solid {BUTTON_BG}; /* Pale green border */
     }}
 
 </style>
@@ -137,8 +160,7 @@ st.markdown(f"""
 # --- App Title ---
 st.title("Ramsdens Client Care Letter Generator")
 
-
-# --- Firm Details (mostly hardcoded from precedent) ---
+# --- Firm Details (unchanged) ---
 firm_details = {
     "name": "Ramsdens Solicitors LLP", "short_name": "Ramsdens",
     "person_responsible_name": "Paul Pinder", "person_responsible_title": "Senior Associate",
@@ -152,7 +174,7 @@ firm_details = {
     "marketing_address": "Ramsdens Solicitors LLP, Oakley House, 1 Hungerford Road, Edgerton, Huddersfield, HD3 3AL"
 }
 
-# --- Sidebar Inputs ---
+# --- Sidebar Inputs (structure unchanged) ---
 st.sidebar.header("Letter Details")
 our_ref = st.sidebar.text_input("Our Reference", "PP/LEGAL/RAM001/001")
 your_ref = st.sidebar.text_input("Your Reference (if any)", "")
@@ -170,7 +192,7 @@ claim_assigned_input = st.sidebar.radio("Is the claim already assigned to a cour
 track_options = ["Small Claims Track", "Fast Track", "Intermediate Track", "Multi Track"]
 selected_track_input = st.sidebar.selectbox("Which court track applies or is anticipated?", track_options, key="track_select")
 
-# --- Main Area Inputs ---
+# --- Main Area Inputs (structure unchanged) ---
 st.header("Dynamic Content (Answers to Questions)")
 qu1_dispute_nature_input = st.text_area("Q1: Nature of the Dispute (for 'the Dispute')", "a contractual matter related to services provided", height=75)
 qu2_initial_steps_input = st.text_area("Q2: Immediate Steps to be Taken (for 'the Work')", "review the documentation you have provided and advise you on the merits of your position and potential next steps. we will also prepare an initial letter to the other side", height=150)
@@ -188,7 +210,7 @@ app_inputs = {
 }
 app_inputs.update(firm_details)
 
-# --- Precedent Text (assumed same and correct as per previous version) ---
+# --- Precedent Text (unchanged) ---
 precedent_content = """
 Our Ref: {our_ref}
 Your Ref: {your_ref}
@@ -415,10 +437,10 @@ Yours sincerely,
 Solicitor
 """.strip()
 
-# --- Document Generation Logic ---
-if st.button("Generate Client Care Letter"):
+
+# --- Document Generation Logic (unchanged from previous correct version) ---
+if st.button("Generate Client Care Letter"): # This button will be styled by CSS
     doc = Document()
-    # Set default font for the document (Arial 11pt)
     style = doc.styles['Normal']
     font = style.font
     font.name = 'Arial'
@@ -438,14 +460,12 @@ if st.button("Generate Client Care Letter"):
     }
 
     for line_raw in lines:
-        current_line_content_stripped = line_raw.strip() # For tag checking and pure command lines
-        content_to_process_for_runs = current_line_content_stripped # This will be modified by stripping tags
+        current_line_content_stripped = line_raw.strip() 
+        content_to_process_for_runs = current_line_content_stripped
 
-        # --- 1. State Management & Tag Stripping ---
         line_had_start_tag = False
         line_had_end_tag = False
 
-        # Client type blocks
         if current_line_content_stripped == "[indiv]": in_indiv_block = True; continue
         if current_line_content_stripped == "[end indiv]": in_indiv_block = False; continue
         if current_line_content_stripped == "[corp]": in_corp_block = True; continue
@@ -455,7 +475,7 @@ if st.button("Generate Client Care Letter"):
             in_indiv_block = True; line_had_start_tag = True
             content_to_process_for_runs = content_to_process_for_runs.removeprefix("[indiv]")
         if content_to_process_for_runs.endswith("[end indiv]"):
-            line_had_end_tag = True # Mark that it had an end tag
+            line_had_end_tag = True 
             content_to_process_for_runs = content_to_process_for_runs.removesuffix("[end indiv]")
         
         if content_to_process_for_runs.startswith("[corp]"):
@@ -465,8 +485,7 @@ if st.button("Generate Client Care Letter"):
             line_had_end_tag = True
             content_to_process_for_runs = content_to_process_for_runs.removesuffix("[end corp]")
 
-        # Track blocks
-        if not active_track_block_type: # Only look for a new start if not already in one
+        if not active_track_block_type: 
             for tag_key in track_tags_map:
                 if content_to_process_for_runs.startswith(tag_key):
                     active_track_block_type = tag_key; line_had_start_tag = True
@@ -479,7 +498,6 @@ if st.button("Generate Client Care Letter"):
                 line_had_end_tag = True
                 content_to_process_for_runs = content_to_process_for_runs.removesuffix(end_tag_for_current_block)
 
-        # --- 2. Determine if current content should be rendered ---
         should_render_based_on_client_type = True
         if in_indiv_block and app_inputs['client_type'] != "Individual": should_render_based_on_client_type = False
         elif in_corp_block and app_inputs['client_type'] != "Corporate": should_render_based_on_client_type = False
@@ -493,12 +511,10 @@ if st.button("Generate Client Care Letter"):
                 should_render_based_on_track = False
         
         should_render_final = should_render_based_on_client_type and should_render_based_on_track
-        
-        # --- 3. Render content ---
         final_content_for_runs_stripped = content_to_process_for_runs.strip()
 
         if current_line_content_stripped == "[]":
-            if doc.paragraphs and should_render_final: # Only add spacing if the context allows
+            if doc.paragraphs and should_render_final: 
                  doc.paragraphs[-1].paragraph_format.space_after = Pt(12)
         elif should_render_final and final_content_for_runs_stripped:
             current_content_substituted = final_content_for_runs_stripped
@@ -534,12 +550,11 @@ if st.button("Generate Client Care Letter"):
                 if para_prefix:
                     run_prefix = p.add_run(para_prefix); run_prefix.font.name = 'Arial'; run_prefix.font.size = Pt(11)
                 add_runs_from_text(p, current_content_substituted, app_inputs)
-        elif should_render_final and current_line_content_stripped == "": # Handle intentional empty lines for spacing
+        elif should_render_final and current_line_content_stripped == "": 
             doc.add_paragraph()
 
-        # --- 4. Deactivate states if an end tag was processed on this line ---
         if line_had_end_tag:
-            if current_line_content_stripped.endswith("[end indiv]") or (line_had_start_tag and content_to_process_for_runs == "" and in_indiv_block): # Check original before stripping for suffix
+            if current_line_content_stripped.endswith("[end indiv]") or (line_had_start_tag and content_to_process_for_runs == "" and in_indiv_block): 
                 in_indiv_block = False
             if current_line_content_stripped.endswith("[end corp]") or (line_had_start_tag and content_to_process_for_runs == "" and in_corp_block):
                 in_corp_block = False
@@ -553,7 +568,7 @@ if st.button("Generate Client Care Letter"):
     doc.save(doc_io)
     doc_io.seek(0)
     st.success("Client Care Letter Generated!")
-    st.download_button(
+    st.download_button( # This button will be styled by CSS
         label="Download Word Document", data=doc_io,
         file_name=f"Client_Care_Letter_{client_name_input.replace(' ', '_')}.docx",
         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
