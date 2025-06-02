@@ -50,7 +50,7 @@ client_type = st.radio("Client Type:",
 
 st.header("Dispute & Claim Details")
 q1_dispute_nature = st.text_area("Q1: What is the nature of the dispute?", 
-                                 "a contractual dispute regarding the supply of widgets.",
+                                 "a contractual dispute regarding the supply of widgets",
                                  height=100)
 
 claim_assigned = st.radio("Has the claim already been assigned to a court track?",
@@ -61,14 +61,14 @@ track_options = ["Small Claims Track", "Fast Track", "Intermediate Track", "Mult
 selected_track = st.selectbox("Which court track applies or is anticipated?", track_options, key="track_select")
 
 st.header("Scope of Work & Pricing")
-q2_initial_advice = st.text_area("Q2: What advice will initially be given and when will it be completed by?",
-                                 "We will review the provided documentation, assess the merits of your claim, and provide you with initial written advice on potential next steps within 14 days.",
+q2_initial_advice = st.text_area("Q2: Set out the immediate steps that will be taken (this maybe a review of the facts and papers to allow you to advise in writing or making initial court applications or taking the first step, prosecuting or defending in a mainstream action). If you have agreed to engage counsel or other third party to assist you should also say so here.",
+                                 "we will review the provided documentation, assess the merits of your claim, and provide you with initial written advice on potential next steps within 14 days",
                                  height=150)
-q3_longer_term_instructions = st.text_area("Q3: Are there any longer term instructions and how long will those take? (Leave blank if not applicable)",
-                                           "",
+q3_longer_term_instructions = st.text_area("Q3: Explain estimated time scale for completion of the Work)",
+                                           "The initial work will take around 14 days to complete and then the further work is likely to depend on the outcome of the initial letters. The Work is likely to take a total time period of two to three months depending on the other side.",
                                            height=100)
-q4_pricing_info = st.text_area("Q4: What is the pricing information given to the client? (e.g., fixed fee, hourly rates summary)",
-                               "Our work will be charged on an hourly rate basis. We estimate an initial budget of £X for the work outlined above. A detailed breakdown of our hourly rates is provided below.",
+q4_pricing_info = st.text_area("Q4: From the information you have provided us with to date, we estimate that our costs for the Work will be £[x] plus VAT. What is x?",
+                               "1,000",
                                height=150)
 
 st.header("Additional Financial Details")
@@ -82,11 +82,11 @@ interest_rate_over_base = st.text_input("Interest on Unpaid Bills (% over Base R
 
 if st.button("Generate Client Care Letter"):
     doc = Document()
-    # Set default font for the document (optional, but can help consistency)
-    # style = doc.styles['Normal']
-    # font = style.font
-    # font.name = 'Arial' # Or 'Times New Roman' etc.
-    # font.size = Pt(11) # Or your preferred size
+    #Set default font for the document (optional, but can help consistency)
+    style = doc.styles['Normal']
+    font = style.font
+    font.name = 'Arial' # Or 'Times New Roman' etc.
+    font.size = Pt(11) # Or your preferred size
 
     # --- P1: Refs and Date ---
     add_formatted_paragraph(doc, f"Our Ref: {our_ref}")
@@ -97,21 +97,23 @@ if st.button("Generate Client Care Letter"):
     add_formatted_paragraph(doc, f"Dear {client_name},", space_after_pt=12)
 
     # --- P3: Thank you ---
-    add_formatted_paragraph(doc, f"Thank you for your instructions to act on your behalf in relation to {q1_dispute_nature}")
+    add_formatted_paragraph(doc, f"Further to our recent discussions, we now write to confirm the terms under which Ramsdens Solicitors LLP (\"Ramsdens\") will act for you. As a firm that is regulated by the Solicitors Regulation Authority, we are required to send you this letter which contains specific and prescribed information.", space_after_pt=12) 
+    
+    # Thank you for your instructions to act on your behalf in relation to {q1_dispute_nature}")
 
     # --- P4: This letter and Terms ---
-    terms_doc_name = "Terms of Business for Individual Clients" if client_type == "Individual Client" else "Terms of Business for Commercial Clients"
-    add_formatted_paragraph(doc, f"This letter and the accompanying {terms_doc_name} set out the basis on which we will provide our services to you. Please read them carefully. If you have any questions, please do not hesitate to contact us. Unless we hear from you to the contrary within 7 days of receipt of this letter, we will assume that you are happy with the terms set out.")
-
+    add_formatted_paragraph(doc, f"We enclose with this letter our Terms and Conditions of Business which must be read in conjunction with this letter. These documents are a formal communication and the language used is reflective of that. We hope that you understand. Please take the time to read these documents carefully. Where there is any conflict between this letter and our Terms and Conditions of Business, the terms of this letter will prevail. Your continuing instructions in this matter will amount to your acceptance of our Terms and Conditions of Business.", space_after_pt=12)
+    
     # --- P5 & P6: Your instructions ---
     add_formatted_paragraph(doc, "Your instructions", is_heading=True, heading_level=1, space_after_pt=6) # Using Word's Heading 1 style
-    add_formatted_paragraph(doc, f"You have asked us to advise you on {q1_dispute_nature}")
+    add_formatted_paragraph(doc, f"We are instructed in relation to {q1_dispute_nature} (\"the Dispute\"). Per our recent discussions, in the first instance we are instructed to {q2_initial_advice} (\"the Work\").
+    
 
     # --- P7 & P8: Work we will do ---
     add_formatted_paragraph(doc, "Work we will do", is_heading=True, heading_level=1, space_after_pt=6)
-    add_formatted_paragraph(doc, q2_initial_advice)
-
-    # --- P9: Longer term instructions (conditional) ---
+    add_formatted_paragraph(doc, f"This matter may develop over time and the nature of disputes is that opposing parties often seek to present facts and matters in a way that is favourable to their own case. We therefore cannot predict every eventuality but we will work with you to advise on any significant developments and review the overall strategy should that be required. Insofar as changes in the future may have a material impact on any cost estimates provided, we will discuss that with you. We will notify you of any material changes by telephone or in correspondence and we will of course always confirm any verbal advice in writing whenever you request that from us.", space_after_pt=12)
+    # --- P9: Timescales ---
+    add_formatted_paragraph(doc, "Timescales", is_heading=True, heading_level=1, space_after_pt=6) # Using Word's Heading 1 style
     if q3_longer_term_instructions and q3_longer_term_instructions.strip():
         add_formatted_paragraph(doc, q3_longer_term_instructions)
 
