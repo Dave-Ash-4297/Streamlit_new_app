@@ -6,19 +6,15 @@ import io
 from datetime import datetime
 import re
 
-# --- Helper function (add_runs_from_text) - unchanged from your previous correct version ---
+# --- Helper function (add_runs_from_text) - unchanged ---
 def add_runs_from_text(paragraph, text_line, app_inputs):
-    # Replace placeholders first
     text_line = text_line.replace("[qu 1 set out the nature of the dispute - start and end lower case]", app_inputs.get('qu1_dispute_nature', ""))
     text_line = text_line.replace("[qu 2 set out the immediate steps that will be taken (this maybe a review of the facts and papers to allow you to advise in writing or making initial court applications or taking the first step, prosecuting or defending in a mainstream action). If you have agreed to engage counsel or other third party to assist you should also say so here – start and end lower case]", app_inputs.get('qu2_initial_steps', ""))
     text_line = text_line.replace("[qu3 Explain the estimated time scales to complete the Work. Start capital and end full stop]", app_inputs.get('qu3_timescales', ""))
     text_line = text_line.replace("£ [qu4_ what is the value of the estimated initial costs xx,xxx?]", f"£{app_inputs.get('qu4_initial_costs_estimate', 'XX,XXX')}")
 
     parts = re.split(r'(\[bold\]|\[end bold\]|\[italics\]|\[end italics\]|\[underline\]|\[end underline\]|\[end\])', text_line)
-    is_bold = False
-    is_italic = False
-    is_underline = False
-
+    is_bold = False; is_italic = False; is_underline = False
     for part in parts:
         if not part: continue
         if part == "[bold]": is_bold = True
@@ -27,19 +23,122 @@ def add_runs_from_text(paragraph, text_line, app_inputs):
         elif part == "[end italics]" or (part == "[end]" and is_italic): is_italic = False
         elif part == "[underline]": is_underline = True
         elif part == "[end underline]" or (part == "[end]" and is_underline): is_underline = False
-        elif part == "[end]": # General catch-all
-            is_bold = False; is_italic = False; is_underline = False
+        elif part == "[end]": is_bold = False; is_italic = False; is_underline = False
         else:
             run = paragraph.add_run(part)
             if is_bold: run.bold = True
             if is_italic: run.italic = True
             if is_underline: run.underline = True
-            run.font.name = 'Arial'
-            run.font.size = Pt(11)
+            run.font.name = 'Arial'; run.font.size = Pt(11)
 
-# --- Streamlit UI (condensed for brevity, assumed same as before) ---
-st.set_page_config(layout="wide")
+# --- Ramsdens Color Palette (approximations) ---
+RAMSDENS_NAVY = "#003366"  # A common navy blue, adjust if a more specific one is found
+RAMSDENS_TEAL = "#008080"  # A standard teal, adjust
+RAMSDENS_LIGHT_GREY_BG = "#f0f2f6" # Light grey for secondary background
+RAMSDENS_TEXT_COLOR = "#333333" # Dark grey for text
+RAMSDENS_WHITE = "#FFFFFF"
+
+# --- Streamlit Page Configuration ---
+st.set_page_config(
+    layout="wide",
+    page_title="Ramsdens Client Care Letter Generator",
+    page_icon="https://www.ramsdens.co.uk/wp-content/themes/ramsdens/favicon.ico" # Favicon from their site
+)
+
+# --- Custom CSS for Ramsdens Styling ---
+st.markdown(f"""
+<style>
+    /* Main background color */
+    .stApp {{
+        background-color: {RAMSDENS_WHITE};
+    }}
+
+    /* Sidebar styling */
+    .stSidebar {{
+        background-color: {RAMSDENS_LIGHT_GREY_BG};
+    }}
+    .stSidebar .st-emotion-cache-16txtl3 {{ /* Sidebar header */
+        color: {RAMSDENS_NAVY};
+    }}
+     .stSidebar .st-emotion-cache-ue6h4r p {{ /* Sidebar text input labels */
+        color: {RAMSDENS_TEXT_COLOR};
+    }}
+
+
+    /* Primary button styling (Generate button) */
+    .stButton>button {{
+        background-color: {RAMSDENS_NAVY};
+        color: {RAMSDENS_WHITE};
+        border: 2px solid {RAMSDENS_NAVY};
+        border-radius: 5px;
+        padding: 10px 20px;
+    }}
+    .stButton>button:hover {{
+        background-color: {RAMSDENS_TEAL};
+        color: {RAMSDENS_WHITE};
+        border: 2px solid {RAMSDENS_TEAL};
+    }}
+    
+    /* Download button - often needs specific targeting if default button class is overridden */
+    div[data-testid="stDownloadButton"] button {{
+        background-color: {RAMSDENS_TEAL};
+        color: {RAMSDENS_WHITE};
+        border: 2px solid {RAMSDENS_TEAL};
+        border-radius: 5px;
+        padding: 10px 20px;
+    }}
+    div[data-testid="stDownloadButton"] button:hover {{
+        background-color: {RAMSDENS_NAVY};
+        color: {RAMSDENS_WHITE};
+        border: 2px solid {RAMSDENS_NAVY};
+    }}
+
+
+    /* Headers in the main app area */
+    h1, .st-emotion-cache-10trblm {{ /* Main title and st.title */
+        color: {RAMSDENS_NAVY};
+        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; /* Example sans-serif */
+    }}
+    h2, .st-emotion-cache-s8k1j8 {{ /* st.header */
+        color: {RAMSDENS_NAVY};
+        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        margin-top: 20px;
+        border-bottom: 2px solid {RAMSDENS_TEAL};
+        padding-bottom: 5px;
+    }}
+     h3 {{ /* st.subheader - if used */
+        color: {RAMSDENS_TEAL};
+        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    }}
+
+    /* Text input and text area labels */
+    .stTextInput label, .stTextArea label, .stDateInput label, .stSelectbox label, .stRadio label {{
+        color: {RAMSDENS_TEXT_COLOR} !important; /* Use !important if needed to override Streamlit defaults */
+         font-weight: bold;
+    }}
+    
+    /* General text color */
+    body, p, .stMarkdown, .stAlert {{
+        color: {RAMSDENS_TEXT_COLOR};
+        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    }}
+
+    /* Styling for success messages */
+    .stAlert[data-baseweb="alert"] div[role="alert"] {{
+        background-color: #e6f7ff; /* A light blue, can be adjusted */
+        color: {RAMSDENS_NAVY};
+        border: 1px solid {RAMSDENS_TEAL};
+    }}
+
+</style>
+""", unsafe_allow_html=True)
+
+
+# --- App Title ---
 st.title("Ramsdens Client Care Letter Generator")
+
+
+# --- Firm Details (mostly hardcoded from precedent) ---
 firm_details = {
     "name": "Ramsdens Solicitors LLP", "short_name": "Ramsdens",
     "person_responsible_name": "Paul Pinder", "person_responsible_title": "Senior Associate",
@@ -52,25 +151,33 @@ firm_details = {
     "account_number": "03909026", "marketing_email": "dataprotection@ramsdens.co.uk",
     "marketing_address": "Ramsdens Solicitors LLP, Oakley House, 1 Hungerford Road, Edgerton, Huddersfield, HD3 3AL"
 }
+
+# --- Sidebar Inputs ---
 st.sidebar.header("Letter Details")
 our_ref = st.sidebar.text_input("Our Reference", "PP/LEGAL/RAM001/001")
 your_ref = st.sidebar.text_input("Your Reference (if any)", "")
 letter_date = st.sidebar.date_input("Letter Date", datetime.today())
+
 st.sidebar.header("Client Information")
 client_name_input = st.sidebar.text_input("Client Full Name / Company Name", "Mr. John Smith")
 client_address_line1 = st.sidebar.text_input("Client Address Line 1", "123 Example Street")
 client_address_line2 = st.sidebar.text_input("Client Address Line 2", "SomeTown")
 client_postcode = st.sidebar.text_input("Client Postcode", "EX4 MPL")
 client_type = st.sidebar.radio("Client Type:", ("Individual", "Corporate"), key="client_type_radio")
+
 st.sidebar.header("Case Details")
 claim_assigned_input = st.sidebar.radio("Is the claim already assigned to a court track?", ("Yes", "No"), key="claim_assigned_radio")
 track_options = ["Small Claims Track", "Fast Track", "Intermediate Track", "Multi Track"]
 selected_track_input = st.sidebar.selectbox("Which court track applies or is anticipated?", track_options, key="track_select")
+
+# --- Main Area Inputs ---
 st.header("Dynamic Content (Answers to Questions)")
 qu1_dispute_nature_input = st.text_area("Q1: Nature of the Dispute (for 'the Dispute')", "a contractual matter related to services provided", height=75)
 qu2_initial_steps_input = st.text_area("Q2: Immediate Steps to be Taken (for 'the Work')", "review the documentation you have provided and advise you on the merits of your position and potential next steps. we will also prepare an initial letter to the other side", height=150)
 qu3_timescales_input = st.text_area("Q3: Estimated Timescales for 'the Work'", "We estimate that the initial Work will take approximately 2-4 weeks to complete, depending on the complexity and responsiveness of other parties. We will keep you updated on progress.", height=100)
 qu4_initial_costs_estimate_input = st.text_input("Q4: Estimated Initial Costs for 'the Work' (e.g., 1,500)", "1,500")
+
+st.header("Fee Table Insertion")
 fee_table_content_input = st.text_area("Fee Table Content (to be inserted in 'Costs and Disbursements')", "Partner: £XXX per hour\nSenior Associate: £YYY per hour\nSolicitor: £ZZZ per hour\nParalegal: £AAA per hour", height=150)
 
 app_inputs = {
@@ -81,7 +188,7 @@ app_inputs = {
 }
 app_inputs.update(firm_details)
 
-# --- Precedent Text (assumed same as before) ---
+# --- Precedent Text (assumed same and correct as per previous version) ---
 precedent_content = """
 Our Ref: {our_ref}
 Your Ref: {your_ref}
@@ -278,8 +385,7 @@ The enclosed Privacy Notice explains how and why we collect, store, use and shar
 []
 Our use of your personal data is subject to your instructions, the EU General Data Protection Regulation (GDPR), other relevant UK and EU legislation and our professional duty of confidentiality. Under data protection law, we can only use your personal data if we have a proper reason for doing so. Detailed reasons why we may process your personal data are set out in our Privacy Notice but examples are:
 []
-[]
-To comply with our legal and regulatory obligations;
+[]To comply with our legal and regulatory obligations;
 [a]For the performance of our contract with you or to take steps at your request before entering into a contract; or
 [b]For our legitimate interests or those of a third party, including:
 [bp]Operational reasons, such as recording transactions, training and quality control;
@@ -309,9 +415,10 @@ Yours sincerely,
 Solicitor
 """.strip()
 
-
+# --- Document Generation Logic ---
 if st.button("Generate Client Care Letter"):
     doc = Document()
+    # Set default font for the document (Arial 11pt)
     style = doc.styles['Normal']
     font = style.font
     font.name = 'Arial'
@@ -321,7 +428,7 @@ if st.button("Generate Client Care Letter"):
     
     in_indiv_block = False
     in_corp_block = False
-    active_track_block_type = None # Stores the type like '[all_sc]', '[ft]', etc.
+    active_track_block_type = None 
     
     track_tags_map = {
         '[all_sc]': ("Yes", "Small Claims Track"), '[all_ft]': ("Yes", "Fast Track"),
@@ -331,83 +438,70 @@ if st.button("Generate Client Care Letter"):
     }
 
     for line_raw in lines:
-        current_line_content = line_raw.strip()
-        original_line_for_spacing_check = line_raw.strip() # Keep a copy for "[]" check
+        current_line_content_stripped = line_raw.strip() # For tag checking and pure command lines
+        content_to_process_for_runs = current_line_content_stripped # This will be modified by stripping tags
 
-        # --- 1. Handle State Changes and Tag Stripping ---
-        # These flags determine if the *current line's stripped content* should be processed
-        # under a newly activated block condition.
-        
-        processed_current_line_content = current_line_content
+        # --- 1. State Management & Tag Stripping ---
+        line_had_start_tag = False
+        line_had_end_tag = False
 
         # Client type blocks
-        if processed_current_line_content == "[indiv]": in_indiv_block = True; continue
-        if processed_current_line_content == "[end indiv]": in_indiv_block = False; continue
-        if processed_current_line_content == "[corp]": in_corp_block = True; continue
-        if processed_current_line_content == "[end corp]": in_corp_block = False; continue
+        if current_line_content_stripped == "[indiv]": in_indiv_block = True; continue
+        if current_line_content_stripped == "[end indiv]": in_indiv_block = False; continue
+        if current_line_content_stripped == "[corp]": in_corp_block = True; continue
+        if current_line_content_stripped == "[end corp]": in_corp_block = False; continue
         
-        if processed_current_line_content.startswith("[indiv]"):
-            in_indiv_block = True
-            processed_current_line_content = processed_current_line_content.removeprefix("[indiv]")
-        if processed_current_line_content.endswith("[end indiv]"):
-            # Content before [end indiv] is part of the block
-            processed_current_line_content = processed_current_line_content.removesuffix("[end indiv]")
-            # State will be turned off *after* processing this line's content
+        if content_to_process_for_runs.startswith("[indiv]"):
+            in_indiv_block = True; line_had_start_tag = True
+            content_to_process_for_runs = content_to_process_for_runs.removeprefix("[indiv]")
+        if content_to_process_for_runs.endswith("[end indiv]"):
+            line_had_end_tag = True # Mark that it had an end tag
+            content_to_process_for_runs = content_to_process_for_runs.removesuffix("[end indiv]")
         
-        if processed_current_line_content.startswith("[corp]"):
-            in_corp_block = True
-            processed_current_line_content = processed_current_line_content.removeprefix("[corp]")
-        if processed_current_line_content.endswith("[end corp]"):
-            processed_current_line_content = processed_current_line_content.removesuffix("[end corp]")
+        if content_to_process_for_runs.startswith("[corp]"):
+            in_corp_block = True; line_had_start_tag = True
+            content_to_process_for_runs = content_to_process_for_runs.removeprefix("[corp]")
+        if content_to_process_for_runs.endswith("[end corp]"):
+            line_had_end_tag = True
+            content_to_process_for_runs = content_to_process_for_runs.removesuffix("[end corp]")
 
         # Track blocks
-        # Check if this line STARTS a new track block
         if not active_track_block_type: # Only look for a new start if not already in one
-            for tag_key, (assign_status, track_name) in track_tags_map.items():
-                if processed_current_line_content.startswith(tag_key):
-                    active_track_block_type = tag_key
-                    processed_current_line_content = processed_current_line_content.removeprefix(tag_key)
+            for tag_key in track_tags_map:
+                if content_to_process_for_runs.startswith(tag_key):
+                    active_track_block_type = tag_key; line_had_start_tag = True
+                    content_to_process_for_runs = content_to_process_for_runs.removeprefix(tag_key)
                     break 
         
-        # Check if this line ENDS the current active track block
-        ended_track_on_this_line = False
         if active_track_block_type:
-            end_tag_for_current_block = f"[end {active_track_block_type[1:-1]}]" # e.g. [end all_sc]
-            if processed_current_line_content.endswith(end_tag_for_current_block):
-                processed_current_line_content = processed_current_line_content.removesuffix(end_tag_for_current_block)
-                ended_track_on_this_line = True # Mark that it ended, state cleared after processing
+            end_tag_for_current_block = f"[end {active_track_block_type[1:-1]}]"
+            if content_to_process_for_runs.endswith(end_tag_for_current_block):
+                line_had_end_tag = True
+                content_to_process_for_runs = content_to_process_for_runs.removesuffix(end_tag_for_current_block)
 
-        # --- 2. Determine if current processed_current_line_content should be rendered ---
-        should_render = True
-
-        # Filter by client type
-        if in_indiv_block and app_inputs['client_type'] != "Individual": should_render = False
-        elif in_corp_block and app_inputs['client_type'] != "Corporate": should_render = False
+        # --- 2. Determine if current content should be rendered ---
+        should_render_based_on_client_type = True
+        if in_indiv_block and app_inputs['client_type'] != "Individual": should_render_based_on_client_type = False
+        elif in_corp_block and app_inputs['client_type'] != "Corporate": should_render_based_on_client_type = False
         
-        # Filter by track type (if a track block is active for this content)
-        if should_render and active_track_block_type:
+        should_render_based_on_track = True
+        if active_track_block_type:
             target_assignment_status_str, target_track_name_str = track_tags_map[active_track_block_type]
             current_assignment_str = "Yes" if app_inputs['claim_assigned'] else "No"
             current_track_str = app_inputs['selected_track']
-
             if not (current_assignment_str == target_assignment_status_str and current_track_str == target_track_name_str):
-                should_render = False
+                should_render_based_on_track = False
         
-        # --- 3. Render content if all conditions met ---
-        final_content_to_print = processed_current_line_content.strip()
+        should_render_final = should_render_based_on_client_type and should_render_based_on_track
+        
+        # --- 3. Render content ---
+        final_content_for_runs_stripped = content_to_process_for_runs.strip()
 
-        if original_line_for_spacing_check == "[]":
-            if doc.paragraphs and should_render: # only add spacing if the current context is valid
+        if current_line_content_stripped == "[]":
+            if doc.paragraphs and should_render_final: # Only add spacing if the context allows
                  doc.paragraphs[-1].paragraph_format.space_after = Pt(12)
-            # Reset states if an end tag was on the same line as [] (unlikely but for safety)
-            if current_line_content.endswith("[end indiv]"): in_indiv_block = False
-            if current_line_content.endswith("[end corp]"): in_corp_block = False
-            if ended_track_on_this_line: active_track_block_type = None
-            continue
-
-        if should_render and final_content_to_print:
-            # Substitute placeholders
-            current_content_substituted = final_content_to_print
+        elif should_render_final and final_content_for_runs_stripped:
+            current_content_substituted = final_content_for_runs_stripped
             current_content_substituted = current_content_substituted.replace("{our_ref}", our_ref)
             current_content_substituted = current_content_substituted.replace("{your_ref}", your_ref)
             current_content_substituted = current_content_substituted.replace("{letter_date}", letter_date.strftime('%d %B %Y'))
@@ -424,8 +518,7 @@ if st.button("Generate Client Care Letter"):
                     p_fee = doc.add_paragraph(); p_fee.paragraph_format.space_after = Pt(6)
                     add_runs_from_text(p_fee, fee_line, app_inputs)
                 if doc.paragraphs: doc.paragraphs[-1].paragraph_format.space_after = Pt(0)
-            
-            else: # Actual Paragraph Creation
+            else:
                 para_style = 'Normal'; para_prefix = ""; para_left_indent = None; para_space_after = Pt(0)
                 if current_content_substituted.startswith("[bp]"):
                     para_style = 'ListBullet'; current_content_substituted = current_content_substituted.replace("[bp]", "").lstrip(); para_space_after = Pt(6)
@@ -441,17 +534,18 @@ if st.button("Generate Client Care Letter"):
                 if para_prefix:
                     run_prefix = p.add_run(para_prefix); run_prefix.font.name = 'Arial'; run_prefix.font.size = Pt(11)
                 add_runs_from_text(p, current_content_substituted, app_inputs)
-
-        elif should_render and original_line_for_spacing_check == "": # Handle intentional empty lines for spacing
+        elif should_render_final and current_line_content_stripped == "": # Handle intentional empty lines for spacing
             doc.add_paragraph()
 
-        # --- 4. Update block states *after* processing the line's content for any END tags ---
-        # This is for tags that were on the same line as content and ended the block.
-        if current_line_content.endswith("[end indiv]"): in_indiv_block = False 
-        if current_line_content.endswith("[end corp]"): in_corp_block = False
-        if ended_track_on_this_line: active_track_block_type = None
+        # --- 4. Deactivate states if an end tag was processed on this line ---
+        if line_had_end_tag:
+            if current_line_content_stripped.endswith("[end indiv]") or (line_had_start_tag and content_to_process_for_runs == "" and in_indiv_block): # Check original before stripping for suffix
+                in_indiv_block = False
+            if current_line_content_stripped.endswith("[end corp]") or (line_had_start_tag and content_to_process_for_runs == "" and in_corp_block):
+                in_corp_block = False
+            if active_track_block_type and current_line_content_stripped.endswith(f"[end {active_track_block_type[1:-1]}]"):
+                active_track_block_type = None
         
-
     if doc.paragraphs and doc.paragraphs[-1].paragraph_format.space_after == Pt(0):
         doc.paragraphs[-1].paragraph_format.space_after = Pt(6)
 
