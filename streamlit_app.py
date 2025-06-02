@@ -268,7 +268,7 @@ Please note that until these identification requirements have been satisfied, we
 []
 [12]At Ramsdens we aim to provide the best possible service to our clients and in order to do this we may arrange for one of our client care team to contact you to discuss how we are doing and what we might do better. Please let us know if you would prefer not to be contacted by our team during our handling of your matter. We do however, need to know from you if you feel dissatisfied about the service you are receiving. Should you have any occasion to feel unhappy about our service please let me know straight away and I will discuss this with you. If you are unable to resolve matters with me and still have concerns regarding our service, contact {supervisor_contact_for_complaints} who will attempt to resolve your concerns with you. Formal complaints will be dealt with in accordance with our Firm's complaints procedures which can be provided on request. In the event you are not satisfied with our handling of your complaint you can contact the Legal Ombudsman, full details will be given as part of our complaints procedure.[/12]
 []
-[13]You also have a right to complain about any bill sent by us by applying to the Court for an assessment of the bill under Part III of the Solicitors Act 1974.[13]
+[13]You also have a right to complain about any bill sent by us by applying to the Court for an assessment of the bill under Part III of the Solicitors Act 1974.[/13]
 []
 [bold]Costs and Disbursements[end]
 []
