@@ -1,6 +1,6 @@
 import streamlit as st
 from docx import Document
-from docx.shared import Pt, Inches
+from docx.shared import Pt, Inches, Cm # Ensure Cm is imported
 from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
 # from docx.enum.style import WD_STYLE_TYPE # For custom styles if needed
 import io
@@ -97,14 +97,13 @@ def preprocess_precedent(precedent_text, app_inputs):
                 
                 if current_block_end_pos != -1: 
                     content_before_end_tag = line_to_process[:current_block_end_pos]
-                    if content_before_end_tag: # Preserve empty lines if they are part of content
-                         current_paragraph_builder['lines'].append(content_before_end_tag)
+                    current_paragraph_builder['lines'].append(content_before_end_tag)
                     
                     if current_paragraph_builder['is_selected_for_render']:
                         logical_elements.append({
                             'type': 'paragraph_block',
                             'paragraph_display_number_text': current_paragraph_builder['paragraph_display_number_text'],
-                            'content': "\n".join(current_paragraph_builder['lines'])
+                            'content_lines': current_paragraph_builder['lines'] 
                         })
                     current_paragraph_builder = None
                     line_to_process = line_to_process[m_end.end():] 
@@ -114,7 +113,7 @@ def preprocess_precedent(precedent_text, app_inputs):
             
             elif m_start: 
                 content_before_tag = line_to_process[:m_start.start()]
-                if content_before_tag: # Preserve empty lines if they are part of content
+                if content_before_tag: 
                     logical_elements.append({'type': 'raw_line', 'content': content_before_tag})
 
                 p_num = m_start.group(1)
@@ -127,12 +126,12 @@ def preprocess_precedent(precedent_text, app_inputs):
                     'version': p_version, 
                     'lines': [], 
                     'is_selected_for_render': selected,
-                    'paragraph_display_number_text': f"{p_num}." # Use extracted number for display
+                    'paragraph_display_number_text': f"{p_num}." 
                 }
                 line_to_process = line_to_process[m_start.end():] 
             
             else: 
-                if line_to_process: # Preserve empty lines if they are part of content
+                if line_to_process: 
                     logical_elements.append({'type': 'raw_line', 'content': line_to_process})
                 line_to_process = "" 
 
@@ -144,7 +143,7 @@ def preprocess_precedent(precedent_text, app_inputs):
             logical_elements.append({
                 'type': 'paragraph_block',
                 'paragraph_display_number_text': current_paragraph_builder['paragraph_display_number_text'],
-                'content': "\n".join(current_paragraph_builder['lines'])
+                'content_lines': current_paragraph_builder['lines']
             })
     return logical_elements
 
@@ -355,7 +354,7 @@ Upon allocation to the Fast Track, the Court will assign your/your opponent’s 
 Upon allocation to the Intermediate Track, the Court will assign your/your opponent’s claim to one of four ‘bands’ depending upon the complexity and number of issues in the claim. When the claim is assigned, as the Claimant/Defendant in the proceedings, we will know that the costs that may be recoverable from your opponent/you will be fixed dependent upon the stage of the proceedings in which the claim is resolved. A table setting out these fixed recoverable costs is enclosed with this letter.[/24-7][end int]
 [mt][24-8]From the information that you have supplied us with, it is likely that were Court proceedings to be commenced, the claim would be allocated to the Multi-Track which is the normal track for claims with a monetary value of in excess of £100,000.
 []
-Upon allocation to the Multi-Track, the fixed costs regime will not apply to your/your opponent’s claim and the general rule that the ‘loser pays the winner’s costs’ will apply, subject to any costs budgeting that has been implemented by the Court and the caveats set out above under the heading [italics]Section 74 Solicitors Act 1974 Agreement & Recovery of Costs[end italics].[/24-8][end mt]
+Upon allocation to the Multi-Track, the fixed costs regime will not apply to your/your opponent’s claim and the general rule that the ‘loser pays the winner’s costs’ will apply, subject to any costs budgeting that has been implemented by the Court and the caveats set out above under the heading [italics]Section 74 Solicitors Act 1974 Agreement & Recovery of Costs[end italics].[24-8][end mt]
 []
 [underline]Costs Advice[end]
 []
@@ -371,7 +370,8 @@ Upon allocation to the Multi-Track, the fixed costs regime will not apply to you
 []
 [30]To this extent, you agree with us that our retainer in this matter is not to be considered an entire agreement, such that we are not obliged to continue acting for you to the conclusion of the matter and are entitled to terminate your retainer before your case is concluded. We are required to make this clear because there has been legal authority that in the absence of such clarity a firm was required to continue acting in a case where they were no longer being funded to do so.[/30]
 []
-[31]You have a right to ask for your overall cost to be limited to a maximum and we trust you will lialiaise with us if you wish to limit your costs. We will not then exceed this limit without first obtaining your consent. However this does mean that your case may not be concluded if we have reached your cost limit.[/31]
+[31]You have a right to ask for your overall cost to be limited to a maximum and we trust you will lialiaise with us if you wish to limit your costs. We will not then exceed this limit without first obtaining your consent. However this
+ does mean that your case may not be concluded if we have reached your cost limit.[/31]
 []
 [32]In Court or some Tribunal proceedings, you may be ordered to pay the costs of someone else, either in relation to the whole of the costs of the case if you are unsuccessful or in relation to some part or issue in the case. Also, you may be ordered to pay the costs of another party during the course of proceedings in relation to a particular application to the Court. In such case you will need to provide this firm with funds to discharge such liability within seven days as failure to do so may prevent your case progressing. Please be aware that once we issue a Court or certain Tribunal claims or counterclaim on your behalf, you are generally unable to discontinue your claim or counterclaim without paying the costs of your opponent unless an agreement on costs is reached.[/32]
 []
@@ -465,134 +465,136 @@ if st.button("Generate Client Care Letter"):
     in_corp_block = False
     active_track_block = None 
 
+    lines_to_process_for_docx = []
     for element in logical_document_elements:
-        lines_to_render_for_docx = []
-        is_from_numbered_block = False 
-
         if element['type'] == 'raw_line':
-            stripped_content = element['content'].strip()
-
-            if stripped_content == "[indiv]": in_indiv_block = True; continue
-            if stripped_content == "[end indiv]": in_indiv_block = False; continue
-            if stripped_content == "[corp]": in_corp_block = True; continue
-            if stripped_content == "[end corp]": in_corp_block = False; continue
-
-            track_tags = ['[all_sc]', '[all_ft]', '[all_int]', '[all_mt]', '[sc]', '[ft]', '[int]', '[mt]']
-            end_track_tags = ['[end all_sc]', '[end all_ft]', '[end all_int]', '[end all_mt]', '[end sc]', '[end ft]', '[end int]', '[end mt]']
-            
-            is_track_start_tag = False
-            for tag in track_tags:
-                if stripped_content == tag: active_track_block = tag; is_track_start_tag = True; break
-            if is_track_start_tag: continue
-
-            is_track_end_tag = False
-            for tag in end_track_tags:
-                if stripped_content == tag:
-                    if active_track_block and tag == f"[end {active_track_block[1:-1]}]": active_track_block = None
-                    is_track_end_tag = True; break
-            if is_track_end_tag: continue
-            
-            if in_indiv_block and app_inputs['client_type'] != "Individual": continue
-            if in_corp_block and app_inputs['client_type'] != "Corporate": continue
-            
-            if active_track_block:
-                should_render_current_track_content = False
-                is_allocated = app_inputs['claim_assigned']; track_name = app_inputs['selected_track']
-                if active_track_block == '[all_sc]' and is_allocated and track_name == "Small Claims Track": should_render_current_track_content = True
-                elif active_track_block == '[all_ft]' and is_allocated and track_name == "Fast Track": should_render_current_track_content = True
-                elif active_track_block == '[all_int]' and is_allocated and track_name == "Intermediate Track": should_render_current_track_content = True
-                elif active_track_block == '[all_mt]' and is_allocated and track_name == "Multi Track": should_render_current_track_content = True
-                elif active_track_block == '[sc]' and not is_allocated and track_name == "Small Claims Track": should_render_current_track_content = True
-                elif active_track_block == '[ft]' and not is_allocated and track_name == "Fast Track": should_render_current_track_content = True
-                elif active_track_block == '[int]' and not is_allocated and track_name == "Intermediate Track": should_render_current_track_content = True
-                elif active_track_block == '[mt]' and not is_allocated and track_name == "Multi Track": should_render_current_track_content = True
-                if not should_render_current_track_content: continue
-            
-            lines_to_render_for_docx.append(element['content']) 
-
+            lines_to_process_for_docx.append({'text': element['content'], 'is_first_numbered_line': False})
         elif element['type'] == 'paragraph_block':
-            if in_indiv_block and app_inputs['client_type'] != "Individual": continue
-            if in_corp_block and app_inputs['client_type'] != "Corporate": continue
-            if active_track_block: 
-                should_render_current_track_content = False
-                is_allocated = app_inputs['claim_assigned']; track_name = app_inputs['selected_track'] 
-                if active_track_block == '[all_sc]' and is_allocated and track_name == "Small Claims Track": should_render_current_track_content = True
-                elif active_track_block == '[all_ft]' and is_allocated and track_name == "Fast Track": should_render_current_track_content = True
-                elif active_track_block == '[all_int]' and is_allocated and track_name == "Intermediate Track": should_render_current_track_content = True
-                elif active_track_block == '[all_mt]' and is_allocated and track_name == "Multi Track": should_render_current_track_content = True
-                elif active_track_block == '[sc]' and not is_allocated and track_name == "Small Claims Track": should_render_current_track_content = True
-                elif active_track_block == '[ft]' and not is_allocated and track_name == "Fast Track": should_render_current_track_content = True
-                elif active_track_block == '[int]' and not is_allocated and track_name == "Intermediate Track": should_render_current_track_content = True
-                elif active_track_block == '[mt]' and not is_allocated and track_name == "Multi Track": should_render_current_track_content = True
-                if not should_render_current_track_content: continue
+            para_num_text = element['paragraph_display_number_text']
+            first_content_line_of_block = True
+            for internal_line in element['content_lines']:
+                line_text_to_add = internal_line
+                is_this_first_numbered = False
+                if first_content_line_of_block and internal_line.strip():
+                    line_text_to_add = f"{para_num_text} {internal_line.lstrip()}" 
+                    is_this_first_numbered = True
+                    first_content_line_of_block = False
+                lines_to_process_for_docx.append({'text': line_text_to_add, 'is_first_numbered_line': is_this_first_numbered})
 
-            block_internal_lines = element['content'].split('\n')
-            para_num_display_str = element['paragraph_display_number_text'] # Use the extracted number + "."
-            has_added_number_to_block = False
-            for internal_line_raw in block_internal_lines:
-                current_text_for_this_docx_para = internal_line_raw 
-                if not has_added_number_to_block and internal_line_raw.strip(): 
-                    current_text_for_this_docx_para = f"{para_num_display_str} {internal_line_raw.lstrip()}"
-                    has_added_number_to_block = True
-                lines_to_render_for_docx.append(current_text_for_this_docx_para)
-            is_from_numbered_block = True
+    for line_item in lines_to_process_for_docx:
+        line_for_docx_processing_raw = line_item['text']
+        is_first_line_of_a_numbered_block = line_item['is_first_numbered_line']
+        
+        stripped_content_for_condition_check = line_for_docx_processing_raw.strip()
+        if stripped_content_for_condition_check == "[indiv]": in_indiv_block = True; continue
+        if stripped_content_for_condition_check == "[end indiv]": in_indiv_block = False; continue
+        if stripped_content_for_condition_check == "[corp]": in_corp_block = True; continue
+        if stripped_content_for_condition_check == "[end corp]": in_corp_block = False; continue
+        track_tags=['[all_sc]', '[all_ft]', '[all_int]', '[all_mt]', '[sc]', '[ft]', '[int]', '[mt]']
+        end_track_tags=['[end all_sc]', '[end all_ft]', '[end all_int]', '[end all_mt]', '[end sc]', '[end ft]', '[end int]', '[end mt]']
+        is_track_start_tag = any(stripped_content_for_condition_check == tag for tag in track_tags)
+        if is_track_start_tag: active_track_block = stripped_content_for_condition_check; continue
+        is_track_end_tag = any(stripped_content_for_condition_check == tag for tag in end_track_tags)
+        if is_track_end_tag:
+            if active_track_block and stripped_content_for_condition_check == f"[end {active_track_block[1:-1]}]": active_track_block = None
+            continue
+        if in_indiv_block and app_inputs['client_type'] != "Individual": continue
+        if in_corp_block and app_inputs['client_type'] != "Corporate": continue
+        if active_track_block:
+            should_render_current_track_content = False 
+            is_allocated = app_inputs['claim_assigned']; track_name = app_inputs['selected_track']
+            if active_track_block == '[all_sc]' and is_allocated and track_name == "Small Claims Track": should_render_current_track_content = True
+            elif active_track_block == '[all_ft]' and is_allocated and track_name == "Fast Track": should_render_current_track_content = True
+            elif active_track_block == '[all_int]' and is_allocated and track_name == "Intermediate Track": should_render_current_track_content = True
+            elif active_track_block == '[all_mt]' and is_allocated and track_name == "Multi Track": should_render_current_track_content = True
+            elif active_track_block == '[sc]' and not is_allocated and track_name == "Small Claims Track": should_render_current_track_content = True
+            elif active_track_block == '[ft]' and not is_allocated and track_name == "Fast Track": should_render_current_track_content = True
+            elif active_track_block == '[int]' and not is_allocated and track_name == "Intermediate Track": should_render_current_track_content = True
+            elif active_track_block == '[mt]' and not is_allocated and track_name == "Multi Track": should_render_current_track_content = True
+            if not should_render_current_track_content: continue
 
-        for line_for_docx_processing_raw in lines_to_render_for_docx:
-            line_for_docx_processing = line_for_docx_processing_raw.strip() 
+        line_for_docx_processing = line_for_docx_processing_raw.strip()
 
-            # Preserve raw line for "[]" and empty lines from original template not inside a block
-            if line_for_docx_processing_raw.strip() == "[]":
-                if doc.paragraphs: doc.paragraphs[-1].paragraph_format.space_after = Pt(12)
-                continue
-            elif not line_for_docx_processing and not is_from_numbered_block: # Empty line from template
-                 if doc.paragraphs: doc.paragraphs[-1].paragraph_format.space_after = Pt(12)
-                 continue # Don't add an actual empty paragraph unless it's for signature lines (handled by [] typically)
-            elif not line_for_docx_processing and is_from_numbered_block: # Empty line within a block (e.g. "[]" was inside [xx]...[/xx])
-                # This effectively is like a "[]" within a numbered block's content
-                if doc.paragraphs: doc.paragraphs[-1].paragraph_format.space_after = Pt(12)
-                continue
+        if line_for_docx_processing_raw.strip() == "[]":
+            if doc.paragraphs: doc.paragraphs[-1].paragraph_format.space_after = Pt(12)
+            continue
+        elif not line_for_docx_processing: 
+            if doc.paragraphs: doc.paragraphs[-1].paragraph_format.space_after = Pt(12)
+            continue
+        
+        if line_for_docx_processing == "[FEE_TABLE_PLACEHOLDER]":
+            fee_lines_content = app_inputs.get('fee_table_content', '').split('\n')
+            for fee_item_line in fee_lines_content:
+                p_fee = doc.add_paragraph()
+                p_fee.paragraph_format.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
+                p_fee.paragraph_format.space_after = Pt(6)
+                add_runs_from_text(p_fee, fee_item_line, app_inputs)
+            if doc.paragraphs and fee_lines_content: 
+                doc.paragraphs[-1].paragraph_format.space_after = Pt(0)
+            continue
 
-            current_paragraph_style_name = 'Normal'
-            left_indent_value = None
-            space_after_val_pt = Pt(0) 
+        text_content_for_runs = line_for_docx_processing
+        current_paragraph_style_name = 'Normal'
+        space_after_val_pt = Pt(0) 
+        current_format_type = "normal"
 
-            if line_for_docx_processing == "[FEE_TABLE_PLACEHOLDER]":
-                fee_lines_content = app_inputs.get('fee_table_content', '').split('\n')
-                for fee_item_line in fee_lines_content:
-                    p_fee = doc.add_paragraph()
-                    p_fee.paragraph_format.space_after = Pt(6)
-                    add_runs_from_text(p_fee, fee_item_line, app_inputs)
-                if doc.paragraphs and fee_lines_content: 
-                    doc.paragraphs[-1].paragraph_format.space_after = Pt(0)
-                continue
+        if is_first_line_of_a_numbered_block:
+            parts = text_content_for_runs.split(" ", 1)
+            if len(parts) == 2: text_content_for_runs = f"{parts[0]}\t{parts[1]}"
+            current_format_type = "numbered"
+        else:
+            original_line_had_ind_tag = text_content_for_runs.startswith("[ind]")
+            if original_line_had_ind_tag:
+                text_content_for_runs = text_content_for_runs.replace("[ind]", "", 1).lstrip()
+                current_format_type = "ind_block_only" 
 
-            text_content_for_runs = line_for_docx_processing # Start with the stripped line
-            if text_content_for_runs.startswith("[bp]"):
-                current_paragraph_style_name = 'ListBullet'; text_content_for_runs = text_content_for_runs.replace("[bp]", "", 1).lstrip(); space_after_val_pt = Pt(6)
-            elif text_content_for_runs.startswith("[a]"): text_content_for_runs = "(a) " + text_content_for_runs.replace("[a]", "", 1).lstrip()
-            elif text_content_for_runs.startswith("[b]"): text_content_for_runs = "(b) " + text_content_for_runs.replace("[b]", "", 1).lstrip()
-            elif text_content_for_runs.startswith("[c]"): text_content_for_runs = "(c) " + text_content_for_runs.replace("[c]", "", 1).lstrip()
-            elif text_content_for_runs.startswith("[d]"): text_content_for_runs = "(d) " + text_content_for_runs.replace("[d]", "", 1).lstrip()
-            elif text_content_for_runs.startswith("[e]"): text_content_for_runs = "(e) " + text_content_for_runs.replace("[e]", "", 1).lstrip()
-            elif text_content_for_runs.startswith("[f]"): text_content_for_runs = "(f) " + text_content_for_runs.replace("[f]", "", 1).lstrip()
-            elif text_content_for_runs.startswith("[g]"): text_content_for_runs = "(g) " + text_content_for_runs.replace("[g]", "", 1).lstrip()
-            elif text_content_for_runs.startswith("[ind]"):
-                left_indent_value = Inches(4 / 2.54); text_content_for_runs = text_content_for_runs.replace("[ind]", "", 1).lstrip()
+            sub_letter_match = re.match(r'^\[([a-zA-Z])\](.*)', text_content_for_runs)
+            if sub_letter_match:
+                letter = sub_letter_match.group(1)
+                rest_of_text = sub_letter_match.group(2).lstrip()
+                text_content_for_runs = f"({letter.lower()})\t{rest_of_text}" 
+                current_format_type = "sub_letter" # This applies whether [ind] was there or not
             
-            if not text_content_for_runs and not (current_paragraph_style_name == 'ListBullet' and not text_content_for_runs): # Avoid adding truly empty paragraphs unless it was an empty bullet
-                continue
+            elif text_content_for_runs.startswith("[bp]"):
+                current_paragraph_style_name = 'ListBullet'
+                text_content_for_runs = text_content_for_runs.replace("[bp]", "", 1).lstrip()
+                space_after_val_pt = Pt(6)
+                current_format_type = "ind_bullet" if original_line_had_ind_tag else "bullet"
+        
+        if not text_content_for_runs.strip() and not (current_paragraph_style_name == 'ListBullet' and not text_content_for_runs):
+            continue
 
-            p = doc.add_paragraph(style=current_paragraph_style_name if current_paragraph_style_name != 'Normal' else None)
-            pf = p.paragraph_format
-            if left_indent_value: pf.left_indent = left_indent_value
-            pf.space_after = space_after_val_pt 
+        p = doc.add_paragraph(style=current_paragraph_style_name if current_paragraph_style_name != 'Normal' else None)
+        pf = p.paragraph_format
+        pf.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
+        pf.tab_stops.clear_all()
 
-            add_runs_from_text(p, text_content_for_runs, app_inputs)
+        if current_format_type == "numbered":
+            pf.left_indent = Cm(0.75)
+            pf.first_line_indent = Cm(-0.75)
+            pf.tab_stops.add_tab_stop(Cm(0.75))
+        elif current_format_type == "sub_letter": # Handles [a] and [ind][a] with the same formatting
+            pf.left_indent = Cm(1.25)
+            pf.first_line_indent = Cm(-0.50) 
+            pf.tab_stops.add_tab_stop(Cm(1.25))
+        elif current_format_type == "bullet": 
+            pass # Rely on ListBullet style's default indents
+        elif current_format_type == "ind_bullet": # [ind][bp]
+            pf.left_indent = Cm(1.75) # Base indent from [ind]
+            # ListBullet style's own indentations for bullet and text will apply relative to this margin.
+        elif current_format_type == "ind_block_only": # Just [ind], and not overridden by [a]
+            pf.left_indent = Cm(1.75)
+            pf.first_line_indent = Cm(0) 
+            pf.tab_stops.add_tab_stop(Cm(1.75))
+        
+        pf.space_after = space_after_val_pt 
+        add_runs_from_text(p, text_content_for_runs, app_inputs)
 
-            if current_paragraph_style_name == 'Normal':
-                for run in p.runs:
-                    if not run.font.name: run.font.name = 'Arial'
-                    if not run.font.size: run.font.size = Pt(11)
+        # Only apply default font to truly 'normal' paragraphs that didn't get styled
+        if current_paragraph_style_name == 'Normal' and current_format_type == "normal":
+            for run in p.runs:
+                if not run.font.name: run.font.name = 'Arial'
+                if not run.font.size: run.font.size = Pt(11)
     
     if doc.paragraphs: 
         if doc.paragraphs[-1].paragraph_format.space_after == Pt(0):
