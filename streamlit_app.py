@@ -278,7 +278,8 @@ The enclosed Privacy Notice explains how and why we collect, store, use and shar
 []
 Our use of your personal data is subject to your instructions, the EU General Data Protection Regulation (GDPR), other relevant UK and EU legislation and our professional duty of confidentiality. Under data protection law, we can only use your personal data if we have a proper reason for doing so. Detailed reasons why we may process your personal data are set out in our Privacy Notice but examples are:
 []
-[]To comply with our legal and regulatory obligations;
+[]
+To comply with our legal and regulatory obligations;
 [a]For the performance of our contract with you or to take steps at your request before entering into a contract; or
 [b]For our legitimate interests or those of a third party, including:
 [bp]Operational reasons, such as recording transactions, training and quality control;
