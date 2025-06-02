@@ -609,3 +609,4 @@ if st.button("Generate Client Care Letter"):
         file_name=f"Client_Care_Letter_{client_name_input.replace(' ', '_')}.docx",
         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     )
+    
