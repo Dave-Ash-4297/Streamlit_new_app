@@ -10,7 +10,7 @@ import re
 DEFAULT_FONT_NAME = "HelveticaNeueLT Pro 45 Lt"
 DEFAULT_FONT_SIZE = Pt(11)
 
-# --- Helper function (add_runs_from_text) - MODIFIED for new font ---
+# --- Helper function (add_runs_from_text) ---
 def add_runs_from_text(paragraph, text_line, app_inputs):
     # Replace placeholders first
     text_line = text_line.replace("[qu 1 set out the nature of the dispute - start and end lower case]", app_inputs.get('qu1_dispute_nature', ""))
@@ -34,16 +34,15 @@ def add_runs_from_text(paragraph, text_line, app_inputs):
             if is_bold: run.bold = True
             if is_italic: run.italic = True
             if is_underline: run.underline = True
-            run.font.name = DEFAULT_FONT_NAME # Use the defined default font
-            run.font.size = DEFAULT_FONT_SIZE # Use the defined default size
+            run.font.name = DEFAULT_FONT_NAME 
+            run.font.size = DEFAULT_FONT_SIZE 
             
-# --- Color Palette (from previous version) ---
+# --- Color Palette ---
 MAIN_BG = "#022933"; MAIN_TEXT = "#FFFFFF"; INPUT_FIELD_BG = "#D3D3D3"; 
 INPUT_LABEL_TEXT = "#FFFFFF"; BUTTON_BG = "#98FB98"; BUTTON_TEXT = "#FFFFFF"; SIDEBAR_BG = "#033b4a"
 
-# --- Streamlit Page Configuration & CSS (from previous version, condensed for brevity) ---
+# --- Streamlit Page Configuration & CSS ---
 st.set_page_config(layout="wide", page_title="Ramsdens Client Care Letter Generator", page_icon="https://www.ramsdens.co.uk/wp-content/themes/ramsdens/favicon.ico")
-# IMPORTANT: The CSS font-family for the Streamlit app UI is separate from the Word document font.
 st.markdown(f"""
 <style>
     /* Main app background and text color */
@@ -51,12 +50,12 @@ st.markdown(f"""
     body, p, .stMarkdown {{ color: {MAIN_TEXT}; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; }}
     /* Sidebar styling */
     .stSidebar {{ background-color: {SIDEBAR_BG}; }}
-    .stSidebar .st-emotion-cache-16txtl3 {{ color: {MAIN_TEXT}; }}
-    .stSidebar .st-emotion-cache-ue6h4r p, .stSidebar label {{ color: {INPUT_LABEL_TEXT} !important; }}
+    .stSidebar .st-emotion-cache-16txtl3 {{ color: {MAIN_TEXT}; }} /* Sidebar header */
+    .stSidebar .st-emotion-cache-ue6h4r p, .stSidebar label {{ color: {INPUT_LABEL_TEXT} !important; }} /* Sidebar input labels */
     .stSidebar .stTextInput input, .stSidebar .stDateInput input, .stSidebar .stSelectbox div[data-baseweb="select"] > div:first-child {{
         background-color: {INPUT_FIELD_BG} !important; color: #000000 !important; border: 1px solid {SIDEBAR_BG};
     }}
-    .stSidebar .stRadio label span {{ color: {INPUT_LABEL_TEXT} !important; }}
+    .stSidebar .stRadio label span {{ color: {INPUT_LABEL_TEXT} !important; }} /* Radio button option text */
     /* Main content headers */
     h1, .st-emotion-cache-10trblm {{ color: {MAIN_TEXT}; }}
     h2, .st-emotion-cache-s8k1j8 {{ color: {MAIN_TEXT}; border-bottom: 2px solid {BUTTON_BG}; padding-bottom: 5px; }}
@@ -68,7 +67,7 @@ st.markdown(f"""
     .main .stTextInput input, .main .stTextArea textarea, .main .stDateInput input, .main .stSelectbox div[data-baseweb="select"] > div:first-child {{
         background-color: {INPUT_FIELD_BG} !important; color: #000000 !important; border: 1px solid {MAIN_BG}; border-radius: 3px;
     }}
-    .main .stRadio label span {{ color: {INPUT_LABEL_TEXT} !important; }}
+    .main .stRadio label span {{ color: {INPUT_LABEL_TEXT} !important; }} /* Radio button option text */
     /* Button styling */
     .stButton>button, div[data-testid="stDownloadButton"] button {{
         background-color: {BUTTON_BG} !important; color: {BUTTON_TEXT} !important; border: 1px solid {BUTTON_BG} !important;
@@ -86,7 +85,7 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 
-# --- App Title, Firm Details, UI Inputs (condensed for brevity, assumed same) ---
+# --- App Title & UI Inputs ---
 st.title("Ramsdens Client Care Letter Generator")
 firm_details = {
     "name": "Ramsdens Solicitors LLP", "short_name": "Ramsdens",
@@ -104,7 +103,7 @@ st.sidebar.header("Letter Details"); our_ref = st.sidebar.text_input("Our Refere
 st.sidebar.header("Client Information"); client_name_input = st.sidebar.text_input("Client Name", "Mr. John Smith"); client_address_line1 = st.sidebar.text_input("Address 1", "123 Example St"); client_address_line2 = st.sidebar.text_input("Address 2", "SomeTown"); client_postcode = st.sidebar.text_input("Postcode", "EX4 MPL"); client_type = st.sidebar.radio("Client Type:", ("Individual", "Corporate"))
 st.sidebar.header("Case Details"); claim_assigned_input = st.sidebar.radio("Claim Assigned?", ("Yes", "No")); track_options = ["Small Claims Track", "Fast Track", "Intermediate Track", "Multi Track"]; selected_track_input = st.sidebar.selectbox("Track?", track_options)
 st.header("Dynamic Content"); qu1_dispute_nature_input = st.text_area("Q1: Nature of Dispute", "a contractual matter"); qu2_initial_steps_input = st.text_area("Q2: Initial Steps", "review docs"); qu3_timescales_input = st.text_area("Q3: Timescales", "2-4 weeks"); qu4_initial_costs_estimate_input = st.text_input("Q4: Initial Costs Est.", "1,500")
-st.header("Fee Table Insertion"); fee_table_content_input = st.text_area("Fee Table Content", "Partner: £XXX")
+st.header("Fee Table Insertion"); fee_table_content_input = st.text_area("Fee Table Content", "Partner: £XXX per hour\nSenior Associate: £YYY per hour") # Added example
 app_inputs = {'qu1_dispute_nature': qu1_dispute_nature_input, 'qu2_initial_steps': qu2_initial_steps_input, 'qu3_timescales': qu3_timescales_input, 'qu4_initial_costs_estimate': qu4_initial_costs_estimate_input, 'fee_table_content': fee_table_content_input, 'client_type': client_type, 'claim_assigned': claim_assigned_input == "Yes", 'selected_track': selected_track_input}; app_inputs.update(firm_details)
 
 # --- Precedent Text (unchanged) ---
@@ -275,7 +274,8 @@ To this extent, you agree with us that our retainer in this matter is not to be 
 []
 You have a right to ask for your overall cost to be limited to a maximum and we trust you will lialiaise with us if you wish to limit your costs. We will not then exceed this limit without first obtaining your consent. However this does mean that your case may not be concluded if we have reached your cost limit.
 []
-In Court or some Tribunal proceedings, you may be ordered to pay the costs of someone else, either in relation to the whole of the costs of the case if you are unsuccessful or in relation to some part or issue in the case. Also, you may be ordered to pay the costs of another party during the course of proceedings in relation to a particular application to the Court. In such case you will need to provide this firm with funds to discharge such liability within seven days as failure to do so may prevent your case progressing. Please be aware that once we issue a Court or certain Tribunal claims or counterclaim on your behalf, you are generally unable to discontinue your claim or counterclaim without paying the costs of your opponent unless an agreement on costs is reached.
+In Court or some Tribunal proceedings, you may be ordered to pay the costs of
+someone else, either in relation to the whole of the costs of the case if you are unsuccessful or in relation to some part or issue in the case. Also, you may be ordered to pay the costs of another party during the course of proceedings in relation to a particular application to the Court. In such case you will need to provide this firm with funds to discharge such liability within seven days as failure to do so may prevent your case progressing. Please be aware that once we issue a Court or certain Tribunal claims or counterclaim on your behalf, you are generally unable to discontinue your claim or counterclaim without paying the costs of your opponent unless an agreement on costs is reached.
 []
 [bold]Limitation of Liability[end]
 []
@@ -344,36 +344,56 @@ if st.button("Generate Client Care Letter"):
     style.font.size = DEFAULT_FONT_SIZE
 
     lines = precedent_content.split('\n')
+    
     in_indiv_block = False; in_corp_block = False; active_track_block_type = None
     main_paragraph_counter = 0
     in_main_numbered_section = False
     SUB_ITEM_INDENT_VALUE = Inches(0.5) 
     FIRST_NUMBERED_PARAGRAPH_CONTAINS = "Further to our recent discussions, we now write to confirm the terms under which Ramsdens Solicitors LLP"
     STOP_NUMBERING_IF_LINE_IS = "Yours sincerely,"
+
     track_tags_map = {
         '[all_sc]': ("Yes", "Small Claims Track"), '[all_ft]': ("Yes", "Fast Track"),
         '[all_int]': ("Yes", "Intermediate Track"), '[all_mt]': ("Yes", "Multi Track"),
         '[sc]': ("No", "Small Claims Track"), '[ft]': ("No", "Fast Track"),
         '[int]': ("No", "Intermediate Track"), '[mt]': ("No", "Multi Track")
     }
+
     for line_raw in lines:
         current_line_stripped_for_logic = line_raw.strip()
         content_to_process_for_runs = current_line_stripped_for_logic 
+
         line_had_start_tag = False; line_had_end_tag = False
+        # --- Pure control lines that should make us skip the rest of the loop for this line ---
         if current_line_stripped_for_logic == "[indiv]": in_indiv_block = True; continue
         if current_line_stripped_for_logic == "[end indiv]": in_indiv_block = False; continue
         if current_line_stripped_for_logic == "[corp]": in_corp_block = True; continue
         if current_line_stripped_for_logic == "[end corp]": in_corp_block = False; continue
+        
+        is_pure_track_control_tag = False
+        if not active_track_block_type: 
+            for tag_key in track_tags_map:
+                if current_line_stripped_for_logic == tag_key:
+                    active_track_block_type = tag_key; is_pure_track_control_tag = True; break
+        if active_track_block_type and not is_pure_track_control_tag: 
+            end_tag_for_current_block = f"[end {active_track_block_type[1:-1]}]"
+            if current_line_stripped_for_logic == end_tag_for_current_block:
+                active_track_block_type = None; is_pure_track_control_tag = True
+        if is_pure_track_control_tag: continue
+
+        # --- Process lines that might have content AND tags ---
         if content_to_process_for_runs.startswith("[indiv]"): in_indiv_block = True; line_had_start_tag = True; content_to_process_for_runs = content_to_process_for_runs.removeprefix("[indiv]")
         if content_to_process_for_runs.endswith("[end indiv]"): line_had_end_tag = True; content_to_process_for_runs = content_to_process_for_runs.removesuffix("[end indiv]")
         if content_to_process_for_runs.startswith("[corp]"): in_corp_block = True; line_had_start_tag = True; content_to_process_for_runs = content_to_process_for_runs.removeprefix("[corp]")
         if content_to_process_for_runs.endswith("[end corp]"): line_had_end_tag = True; content_to_process_for_runs = content_to_process_for_runs.removesuffix("[end corp]")
+        
         if not active_track_block_type:
             for tag_key in track_tags_map:
                 if content_to_process_for_runs.startswith(tag_key): active_track_block_type = tag_key; line_had_start_tag = True; content_to_process_for_runs = content_to_process_for_runs.removeprefix(tag_key); break
         if active_track_block_type:
             end_tag_for_current_block = f"[end {active_track_block_type[1:-1]}]"
             if content_to_process_for_runs.endswith(end_tag_for_current_block): line_had_end_tag = True; content_to_process_for_runs = content_to_process_for_runs.removesuffix(end_tag_for_current_block)
+
         should_render_based_on_client_type = not ((in_indiv_block and app_inputs['client_type'] != "Individual") or \
                                                (in_corp_block and app_inputs['client_type'] != "Corporate"))
         should_render_based_on_track = True
@@ -383,7 +403,9 @@ if st.button("Generate Client Care Letter"):
             if not (current_assignment == target_assignment and app_inputs['selected_track'] == target_track):
                 should_render_based_on_track = False
         should_render_final = should_render_based_on_client_type and should_render_based_on_track
+        
         final_content_after_stripping = content_to_process_for_runs.strip()
+        
         current_content_substituted = final_content_after_stripping 
         current_content_substituted = current_content_substituted.replace("{our_ref}", our_ref)
         current_content_substituted = current_content_substituted.replace("{your_ref}", your_ref)
@@ -394,63 +416,102 @@ if st.button("Generate Client Care Letter"):
         current_content_substituted = current_content_substituted.replace("{client_postcode}", client_postcode)
         for key, val_firm in firm_details.items():
             current_content_substituted = current_content_substituted.replace(f"{{{key}}}", str(val_firm))
+        
         if not in_main_numbered_section and FIRST_NUMBERED_PARAGRAPH_CONTAINS in current_content_substituted:
             in_main_numbered_section = True
+        
         paragraph_number_prefix = ""; current_left_indent = None; is_list_item_or_sub_item = False
-        is_pure_heading = False
-        if (final_content_after_stripping.startswith("[bold]") and final_content_after_stripping.endswith("[end]")) or \
-           (final_content_after_stripping.startswith("[underline]") and final_content_after_stripping.endswith("[end]")):
-            is_pure_heading = True
+        
+        is_pure_heading = (final_content_after_stripping.startswith("[bold]") and final_content_after_stripping.endswith("[end]")) or \
+                          (final_content_after_stripping.startswith("[underline]") and final_content_after_stripping.endswith("[end]"))
+
         if current_content_substituted == STOP_NUMBERING_IF_LINE_IS:
-            in_main_numbered_section = False; paragraph_number_prefix = ""
+            in_main_numbered_section = False 
         elif in_main_numbered_section:
-            if final_content_after_stripping.startswith("[bp]"): is_list_item_or_sub_item = True; current_left_indent = SUB_ITEM_INDENT_VALUE
-            elif re.match(r'\[([a-g])\]', final_content_after_stripping): is_list_item_or_sub_item = True; current_left_indent = SUB_ITEM_INDENT_VALUE
-            elif is_pure_heading or current_content_substituted == "[FEE_TABLE_PLACEHOLDER]" or final_content_after_stripping.startswith("[ind]"): pass
-            elif final_content_after_stripping: main_paragraph_counter += 1; paragraph_number_prefix = f"{main_paragraph_counter}. "
-        if current_line_stripped_for_logic == "[]":
-            if doc.paragraphs and should_render_final: doc.paragraphs[-1].paragraph_format.space_after = Pt(12)
-        elif should_render_final and (final_content_after_stripping or current_line_stripped_for_logic == ""):
+            should_this_specific_line_be_numbered = True 
+
+            if current_line_stripped_for_logic == "[]": 
+                should_this_specific_line_be_numbered = False
+            elif final_content_after_stripping.startswith("[bp]"):
+                is_list_item_or_sub_item = True; current_left_indent = SUB_ITEM_INDENT_VALUE
+                should_this_specific_line_be_numbered = False
+            elif re.match(r'\[([a-g])\]', final_content_after_stripping):
+                is_list_item_or_sub_item = True; current_left_indent = SUB_ITEM_INDENT_VALUE
+                should_this_specific_line_be_numbered = False
+            elif is_pure_heading:
+                should_this_specific_line_be_numbered = False
+            elif current_content_substituted == "[FEE_TABLE_PLACEHOLDER]":
+                should_this_specific_line_be_numbered = False
+            elif final_content_after_stripping.startswith("[ind]"):
+                should_this_specific_line_be_numbered = False
+            elif not final_content_after_stripping: 
+                should_this_specific_line_be_numbered = False
+            
+            if should_this_specific_line_be_numbered:
+                main_paragraph_counter += 1
+                paragraph_number_prefix = f"{main_paragraph_counter}. "
+        
+        if current_line_stripped_for_logic == "[]": 
+            if doc.paragraphs and should_render_final: 
+                 doc.paragraphs[-1].paragraph_format.space_after = Pt(12)
+            # No state change for block endings if it's just a spacer, pure control lines handle this
+            continue 
+        elif should_render_final and (final_content_after_stripping or current_line_stripped_for_logic == ""): 
             content_for_runs_with_numbering = paragraph_number_prefix + current_content_substituted
+            
             if current_content_substituted == "[FEE_TABLE_PLACEHOLDER]":
                 fee_lines = app_inputs['fee_table_content'].split('\n')
                 for fee_line in fee_lines:
                     p_fee = doc.add_paragraph(); p_fee.paragraph_format.space_after = Pt(6); add_runs_from_text(p_fee, fee_line, app_inputs)
                 if doc.paragraphs: doc.paragraphs[-1].paragraph_format.space_after = Pt(0)
-            elif final_content_after_stripping or current_line_stripped_for_logic == "":
-                para_style = 'Normal'; local_para_prefix_for_ab = ""; para_left_indent_final = current_left_indent; para_space_after = Pt(0)
-                text_for_add_runs = content_for_runs_with_numbering
-                if final_content_after_stripping.startswith("[bp]"): para_style = 'ListBullet'; text_for_add_runs = text_for_add_runs.replace("[bp]", "", 1).lstrip(); para_space_after = Pt(6)
-                match_ab = re.match(r'\[([a-g])\](.*)', text_for_add_runs.lstrip(paragraph_number_prefix).lstrip())
-                if is_list_item_or_sub_item and match_ab:
-                    local_para_prefix_for_ab = f"({match_ab.group(1)}) "
-                    text_for_add_runs = text_for_add_runs.replace(f"[{match_ab.group(1)}]", "", 1).lstrip(paragraph_number_prefix).lstrip()
-                    text_for_add_runs = match_ab.group(2).lstrip()
-                    if paragraph_number_prefix: text_for_add_runs = paragraph_number_prefix + local_para_prefix_for_ab + text_for_add_runs
-                    else: text_for_add_runs = local_para_prefix_for_ab + text_for_add_runs
+            elif final_content_after_stripping or current_line_stripped_for_logic == "": 
+                para_style = 'Normal'; local_para_prefix_for_ab = ""; 
+                para_left_indent_final = current_left_indent 
+                para_space_after = Pt(0)
+                
+                text_for_add_runs = content_for_runs_with_numbering 
+
+                if final_content_after_stripping.startswith("[bp]"): 
+                    para_style = 'ListBullet'
+                    # Remove "[bp]" from text_for_add_runs if it's there
+                    if paragraph_number_prefix: # Should not have number, but defensive
+                        text_for_add_runs = paragraph_number_prefix + current_content_substituted.replace("[bp]", "", 1).lstrip()
+                    else:
+                        text_for_add_runs = current_content_substituted.replace("[bp]", "", 1).lstrip()
+                    para_space_after = Pt(6)
+                
+                match_ab_original = re.match(r'\[([a-g])\](.*)', final_content_after_stripping) 
+                if is_list_item_or_sub_item and match_ab_original:
+                    local_para_prefix_for_ab = f"({match_ab_original.group(1)}) "
+                    actual_content_post_ab = match_ab_original.group(2).lstrip()
+                    if paragraph_number_prefix: 
+                        text_for_add_runs = paragraph_number_prefix + local_para_prefix_for_ab + actual_content_post_ab
+                    else:
+                        text_for_add_runs = local_para_prefix_for_ab + actual_content_post_ab
+
                 elif final_content_after_stripping.startswith("[ind]"):
-                    para_left_indent_final = SUB_ITEM_INDENT_VALUE; text_for_add_runs = text_for_add_runs.replace("[ind]", "",1).lstrip()
+                    para_left_indent_final = SUB_ITEM_INDENT_VALUE 
+                    if paragraph_number_prefix: 
+                        text_for_add_runs = paragraph_number_prefix + current_content_substituted.replace("[ind]", "",1).lstrip()
+                    else:
+                        text_for_add_runs = current_content_substituted.replace("[ind]", "",1).lstrip()
+                
                 p = doc.add_paragraph(style=para_style if para_style != 'Normal' else None)
                 pf = p.paragraph_format
                 if para_left_indent_final: pf.left_indent = para_left_indent_final
                 pf.space_after = para_space_after
                 add_runs_from_text(p, text_for_add_runs, app_inputs)
+        
         if line_had_end_tag:
-            if current_line_stripped_for_logic.endswith("[end indiv]"): in_indiv_block = False
-            if current_line_stripped_for_logic.endswith("[end corp]"): in_corp_block = False
-            if active_track_block_type and current_line_stripped_for_logic.endswith(f"[end {active_track_block_type[1:-1]}]"): active_track_block_type = None
-    if doc.paragraphs and doc.paragraphs[-1].paragraph_format.space_after == Pt(0): doc.paragraphs[-1].paragraph_format.space_after = Pt(6)
+            original_content_ending_with_tag = line_raw.strip() 
+            if original_content_ending_with_tag.endswith("[end indiv]"): in_indiv_block = False
+            if original_content_ending_with_tag.endswith("[end corp]"): in_corp_block = False
+            if active_track_block_type and original_content_ending_with_tag.endswith(f"[end {active_track_block_type[1:-1]}]"):
+                active_track_block_type = None
+        
+    if doc.paragraphs and doc.paragraphs[-1].paragraph_format.space_after == Pt(0):
+        doc.paragraphs[-1].paragraph_format.space_after = Pt(6)
 
-
-    doc_io = io.BytesIO()
-    doc.save(doc_io)
-    doc_io.seek(0)
-
+    doc_io = io.BytesIO(); doc.save(doc_io); doc_io.seek(0)
     st.success("Client Care Letter Generated!")
-    st.download_button(
-        label="Download Word Document",
-        data=doc_io,
-        file_name=f"Client_Care_Letter_{client_name_input.replace(' ', '_')}.docx",
-        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-    )
-    
+    st.download_button("Download Word Document", data=doc_io, file_name=f"Client_Care_Letter_{client_name_input.replace(' ', '_')}.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
