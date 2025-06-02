@@ -83,10 +83,8 @@ st.markdown(f"""
 </style>
 """, unsafe_allow_html=True)
 
-
 # --- App Title & UI Inputs ---
 st.title("Ramsdens Client Care Letter Generator")
-
 firm_details = {
     "name": "Ramsdens Solicitors LLP", "short_name": "Ramsdens",
     "person_responsible_name": "Paul Pinder", "person_responsible_title": "Senior Associate",
@@ -99,50 +97,14 @@ firm_details = {
     "account_number": "03909026", "marketing_email": "dataprotection@ramsdens.co.uk",
     "marketing_address": "Ramsdens Solicitors LLP, Oakley House, 1 Hungerford Road, Edgerton, Huddersfield, HD3 3AL"
 }
+st.sidebar.header("Letter Details"); our_ref = st.sidebar.text_input("Our Reference", "PP/LEGAL/RAM001/001"); your_ref = st.sidebar.text_input("Your Reference (if any)", ""); letter_date = st.sidebar.date_input("Letter Date", datetime.today())
+st.sidebar.header("Client Information"); client_name_input = st.sidebar.text_input("Client Name", "Mr. John Smith"); client_address_line1 = st.sidebar.text_input("Address 1", "123 Example St"); client_address_line2 = st.sidebar.text_input("Address 2", "SomeTown"); client_postcode = st.sidebar.text_input("Postcode", "EX4 MPL"); client_type = st.sidebar.radio("Client Type:", ("Individual", "Corporate"))
+st.sidebar.header("Case Details"); claim_assigned_input = st.sidebar.radio("Claim Assigned?", ("Yes", "No")); track_options = ["Small Claims Track", "Fast Track", "Intermediate Track", "Multi Track"]; selected_track_input = st.sidebar.selectbox("Track?", track_options)
+st.header("Dynamic Content"); qu1_dispute_nature_input = st.text_area("Q1: Nature of Dispute", "a contractual matter"); qu2_initial_steps_input = st.text_area("Q2: Initial Steps", "review docs"); qu3_timescales_input = st.text_area("Q3: Timescales", "2-4 weeks"); qu4_initial_costs_estimate_input = st.text_input("Q4: Initial Costs Est.", "1,500")
+st.header("Fee Table Insertion"); fee_table_content_input = st.text_area("Fee Table Content", "Partner: £XXX per hour\nSenior Associate: £YYY per hour")
+app_inputs = {'qu1_dispute_nature': qu1_dispute_nature_input, 'qu2_initial_steps': qu2_initial_steps_input, 'qu3_timescales': qu3_timescales_input, 'qu4_initial_costs_estimate': qu4_initial_costs_estimate_input, 'fee_table_content': fee_table_content_input, 'client_type': client_type, 'claim_assigned': claim_assigned_input == "Yes", 'selected_track': selected_track_input}; app_inputs.update(firm_details)
 
-st.sidebar.header("Letter Details")
-our_ref = st.sidebar.text_input("Our Reference", "PP/LEGAL/RAM001/001")
-your_ref = st.sidebar.text_input("Your Reference (if any)", "")
-letter_date = st.sidebar.date_input("Letter Date", datetime.today())
-
-st.sidebar.header("Client Information")
-client_name_input = st.sidebar.text_input("Client Name", "Mr. John Smith")
-client_address_line1 = st.sidebar.text_input("Address 1", "123 Example St")
-client_address_line2 = st.sidebar.text_input("Address 2", "SomeTown")
-client_postcode = st.sidebar.text_input("Postcode", "EX4 MPL")
-client_type = st.sidebar.radio("Client Type:", ("Individual", "Corporate"))
-
-st.sidebar.header("Case Details")
-claim_assigned_input = st.sidebar.radio("Claim Assigned?", ("Yes", "No"))
-track_options = ["Small Claims Track", "Fast Track", "Intermediate Track", "Multi Track"]
-selected_track_input = st.sidebar.selectbox("Track?", track_options)
-
-st.header("Dynamic Content")
-qu1_dispute_nature_input = st.text_area("Q1: Nature of Dispute", "a contractual matter")
-qu2_initial_steps_input = st.text_area("Q2: Initial Steps", "review docs")
-qu3_timescales_input = st.text_area("Q3: Timescales", "2-4 weeks")
-qu4_initial_costs_estimate_input = st.text_input("Q4: Initial Costs Est.", "1,500")
-
-st.header("Fee Table Insertion")
-fee_table_content_input = st.text_area("Fee Table Content", "Partner: £XXX per hour\nSenior Associate: £YYY per hour")
-
-app_inputs = {
-    'qu1_dispute_nature': qu1_dispute_nature_input, 
-    'qu2_initial_steps': qu2_initial_steps_input, 
-    'qu3_timescales': qu3_timescales_input, 
-    'qu4_initial_costs_estimate': qu4_initial_costs_estimate_input, 
-    'fee_table_content': fee_table_content_input, 
-    'client_type': client_type, 
-    'claim_assigned': claim_assigned_input == "Yes", 
-    'selected_track': selected_track_input
-}
-app_inputs.update(firm_details)
-
-# --- Precedent Text ---
-# IMPORTANT: Ensure single paragraphs in this string are on a single line.
-# e.g., "In Court or some Tribunal proceedings... someone else..." should be one line.
-# For paragraph 60, if "[]To comply..." is how it should appear, leave it.
-# If "[]" is a typo before "To comply...", remove it from this string.
+# --- Precedent Text (ensure correct newlines for paragraphs) ---
 precedent_content = """
 Our Ref: {our_ref}
 Your Ref: {your_ref}
@@ -381,9 +343,9 @@ if st.button("Generate Client Care Letter"):
     lines = precedent_content.split('\n')
     
     # Global states for conditional blocks
-    in_indiv_block_active = False 
-    in_corp_block_active = False  
-    active_track_block_type_global = None 
+    g_in_indiv_block = False 
+    g_in_corp_block = False  
+    g_active_track_block = None 
 
     main_paragraph_counter = 0
     in_main_numbered_section = False 
@@ -398,7 +360,7 @@ if st.button("Generate Client Care Letter"):
     sub_item_left_indent_cm = sub_item_marker_effective_margin_cm + sub_item_text_additional_indent_cm 
     sub_item_first_line_indent_cm = -sub_item_text_additional_indent_cm 
     sub_item_tab_stop_cm = sub_item_left_indent_cm 
-    ind_item_indent_cm = 0.75 # Default for [ind] items
+    ind_item_indent_cm = 0.75 
 
     FIRST_NUMBERED_PARAGRAPH_CONTAINS = "Further to our recent discussions, we now write to confirm the terms under which Ramsdens Solicitors LLP"
     STOP_NUMBERING_IF_LINE_IS = "Yours sincerely,"
@@ -412,105 +374,109 @@ if st.button("Generate Client Care Letter"):
 
     for line_idx, line_raw in enumerate(lines):
         current_line_original_stripped = line_raw.strip()
-        content_to_process_for_runs = current_line_original_stripped 
+        content_after_tag_stripping = current_line_original_stripped # This will be modified by tag stripping
 
         # --- 1. Handle PURE control lines (tags that are alone on a line) ---
         is_pure_control_line_processed = False
-        if current_line_original_stripped == "[indiv]": in_indiv_block_active = True; is_pure_control_line_processed = True
-        elif current_line_original_stripped == "[end indiv]": in_indiv_block_active = False; is_pure_control_line_processed = True
-        elif current_line_original_stripped == "[corp]": in_corp_block_active = True; is_pure_control_line_processed = True
-        elif current_line_original_stripped == "[end corp]": in_corp_block_active = False; is_pure_control_line_processed = True
-        else:
-            if not active_track_block_type_global: 
+        if current_line_original_stripped == "[indiv]": g_in_indiv_block = True; is_pure_control_line_processed = True
+        elif current_line_original_stripped == "[end indiv]": g_in_indiv_block = False; is_pure_control_line_processed = True
+        elif current_line_original_stripped == "[corp]": g_in_corp_block = True; is_pure_control_line_processed = True
+        elif current_line_original_stripped == "[end corp]": g_in_corp_block = False; is_pure_control_line_processed = True
+        else: # Track tags
+            if not g_active_track_block: 
                 for tag_key in track_tags_map:
                     if current_line_original_stripped == tag_key:
-                        active_track_block_type_global = tag_key; is_pure_control_line_processed = True; break
-            if active_track_block_type_global and not is_pure_control_line_processed: 
-                end_tag_for_current_block = f"[end {active_track_block_type_global[1:-1]}]"
+                        g_active_track_block = tag_key; is_pure_control_line_processed = True; break
+            if g_active_track_block and not is_pure_control_line_processed: 
+                end_tag_for_current_block = f"[end {g_active_track_block[1:-1]}]"
                 if current_line_original_stripped == end_tag_for_current_block:
-                    active_track_block_type_global = None; is_pure_control_line_processed = True
+                    g_active_track_block = None; is_pure_control_line_processed = True
         
         if is_pure_control_line_processed: continue
 
         # --- 2. Process lines that might have content AND tags: determine current line's effective block context ---
         #    These flags represent the context *for the content on this specific line*.
-        current_line_is_within_indiv = in_indiv_block_active
-        current_line_is_within_corp = in_corp_block_active
-        current_line_is_within_track = active_track_block_type_global
+        current_line_effective_in_indiv = g_in_indiv_block
+        current_line_effective_in_corp = g_in_corp_block
+        current_line_effective_track_block = g_active_track_block
         
-        _line_will_end_indiv = False
-        _line_will_end_corp = False
-        _line_will_end_track = False
-
-        if content_to_process_for_runs.startswith("[indiv]"): current_line_is_within_indiv = True; content_to_process_for_runs = content_to_process_for_runs.removeprefix("[indiv]")
-        if content_to_process_for_runs.endswith("[end indiv]"): _line_will_end_indiv = True; content_to_process_for_runs = content_to_process_for_runs.removesuffix("[end indiv]")
-        if content_to_process_for_runs.startswith("[corp]"): current_line_is_within_corp = True; content_to_process_for_runs = content_to_process_for_runs.removeprefix("[corp]")
-        if content_to_process_for_runs.endswith("[end corp]"): _line_will_end_corp = True; content_to_process_for_runs = content_to_process_for_runs.removesuffix("[end corp]")
-        
-        if not current_line_is_within_track: 
+        # Check for tags starting on this line and update effective context for *this line*
+        if content_after_tag_stripping.startswith("[indiv]"): current_line_effective_in_indiv = True; content_after_tag_stripping = content_after_tag_stripping.removeprefix("[indiv]")
+        if content_after_tag_stripping.startswith("[corp]"): current_line_effective_in_corp = True; content_after_tag_stripping = content_after_tag_stripping.removeprefix("[corp]")
+        if not current_line_effective_track_block: # Only if not already in a track block from global state
             for tag_key in track_tags_map:
-                if content_to_process_for_runs.startswith(tag_key): current_line_is_within_track = tag_key; content_to_process_for_runs = content_to_process_for_runs.removeprefix(tag_key); break
-        if current_line_is_within_track: 
-            end_tag_for_current_block = f"[end {current_line_is_within_track[1:-1]}]"
-            if content_to_process_for_runs.endswith(end_tag_for_current_block): _line_will_end_track = True; content_to_process_for_runs = content_to_process_for_runs.removesuffix(end_tag_for_current_block)
+                if content_after_tag_stripping.startswith(tag_key): 
+                    current_line_effective_track_block = tag_key
+                    content_after_tag_stripping = content_after_tag_stripping.removeprefix(tag_key)
+                    break
         
-        final_content_after_all_stripping = content_to_process_for_runs.strip()
+        # Check for tags ending on this line (content before end tag is within the block)
+        _line_will_end_indiv = content_after_tag_stripping.endswith("[end indiv]")
+        _line_will_end_corp = content_after_tag_stripping.endswith("[end corp]")
+        _line_will_end_track = False
+        if current_line_effective_track_block:
+            _line_will_end_track = content_after_tag_stripping.endswith(f"[end {current_line_effective_track_block[1:-1]}]")
+
+        if _line_will_end_indiv: content_after_tag_stripping = content_after_tag_stripping.removesuffix("[end indiv]")
+        if _line_will_end_corp: content_after_tag_stripping = content_after_tag_stripping.removesuffix("[end corp]")
+        if _line_will_end_track: content_after_tag_stripping = content_after_tag_stripping.removesuffix(f"[end {current_line_effective_track_block[1:-1]}]")
+
+        final_content_for_runs = content_after_tag_stripping.strip() # Final text after all block tags stripped
 
         # --- 3. Determine if THIS line's content should be rendered based on APP_INPUTS ---
-        should_render_this_line_content = True 
-        if current_line_is_within_indiv and app_inputs['client_type'] != "Individual": should_render_this_line_content = False
-        elif current_line_is_within_corp and app_inputs['client_type'] != "Corporate": should_render_this_line_content = False
+        should_render_this_line = True 
+        if current_line_effective_in_indiv and app_inputs['client_type'] != "Individual": should_render_this_line = False
+        elif current_line_effective_in_corp and app_inputs['client_type'] != "Corporate": should_render_this_line = False
         
-        if current_line_is_within_track and should_render_this_line_content: 
-            target_assignment, target_track_name = track_tags_map[current_line_is_within_track]
+        if current_line_effective_track_block and should_render_this_line: 
+            target_assignment, target_track_name = track_tags_map[current_line_effective_track_block]
             current_assignment_str = "Yes" if app_inputs['claim_assigned'] else "No"
             if not (current_assignment_str == target_assignment and app_inputs['selected_track'] == target_track_name):
-                should_render_this_line_content = False
+                should_render_this_line = False
         
-        # --- 4. Substitute Placeholders ---
-        current_content_substituted = final_content_after_all_stripping
-        current_content_substituted = current_content_substituted.replace("{our_ref}", our_ref) 
-        current_content_substituted = current_content_substituted.replace("{your_ref}", your_ref)
-        current_content_substituted = current_content_substituted.replace("{letter_date}", letter_date.strftime('%d %B %Y'))
-        current_content_substituted = current_content_substituted.replace("{client_name_input}", client_name_input)
-        current_content_substituted = current_content_substituted.replace("{client_address_line1}", client_address_line1)
-        current_content_substituted = current_content_substituted.replace("{client_address_line2_conditional}", client_address_line2 if client_address_line2 else "")
-        current_content_substituted = current_content_substituted.replace("{client_postcode}", client_postcode)
+        # --- 4. Substitute Placeholders in the (potentially) renderable content ---
+        content_with_placeholders_filled = final_content_for_runs # Start with fully stripped content
+        content_with_placeholders_filled = content_with_placeholders_filled.replace("{our_ref}", our_ref) 
+        content_with_placeholders_filled = content_with_placeholders_filled.replace("{your_ref}", your_ref)
+        content_with_placeholders_filled = content_with_placeholders_filled.replace("{letter_date}", letter_date.strftime('%d %B %Y'))
+        content_with_placeholders_filled = content_with_placeholders_filled.replace("{client_name_input}", client_name_input)
+        content_with_placeholders_filled = content_with_placeholders_filled.replace("{client_address_line1}", client_address_line1)
+        content_with_placeholders_filled = content_with_placeholders_filled.replace("{client_address_line2_conditional}", client_address_line2 if client_address_line2 else "")
+        content_with_placeholders_filled = content_with_placeholders_filled.replace("{client_postcode}", client_postcode)
         for key, val_firm in firm_details.items():
-            current_content_substituted = current_content_substituted.replace(f"{{{key}}}", str(val_firm))
+            content_with_placeholders_filled = content_with_placeholders_filled.replace(f"{{{key}}}", str(val_firm))
 
         # --- 5. Numbering Section Logic ---
-        if not in_main_numbered_section and FIRST_NUMBERED_PARAGRAPH_CONTAINS in current_content_substituted:
+        if not in_main_numbered_section and FIRST_NUMBERED_PARAGRAPH_CONTAINS in content_with_placeholders_filled:
             in_main_numbered_section = True
         
         paragraph_number_prefix = ""; is_this_a_main_numbered_paragraph = False
         is_this_a_sub_item_type = None 
         
-        is_heading_lookalike = (final_content_after_all_stripping.startswith(("[bold]", "[underline]")) and final_content_after_all_stripping.endswith("[end]"))
+        is_heading_lookalike = (final_content_for_runs.startswith(("[bold]", "[underline]")) and final_content_for_runs.endswith("[end]"))
 
-        if current_content_substituted == STOP_NUMBERING_IF_LINE_IS:
+        if content_with_placeholders_filled == STOP_NUMBERING_IF_LINE_IS:
             in_main_numbered_section = False 
         elif in_main_numbered_section:
             should_get_main_number = True 
 
             if current_line_original_stripped == "[]" and current_line_original_stripped != "[]To comply with our legal and regulatory obligations;": 
                 should_get_main_number = False
-            elif not final_content_after_all_stripping: 
+            elif not final_content_for_runs: 
                 should_get_main_number = False 
-            elif final_content_after_all_stripping.startswith("[bp]"): 
+            elif final_content_for_runs.startswith("[bp]"): 
                 is_this_a_sub_item_type = 'bp'; should_get_main_number = False
-            elif re.match(r'\[([a-g])\]', final_content_after_all_stripping): 
+            elif re.match(r'\[([a-g])\]', final_content_for_runs): 
                 is_this_a_sub_item_type = 'ab'; should_get_main_number = False
-            elif final_content_after_all_stripping.startswith("[ind]"):
+            elif final_content_for_runs.startswith("[ind]"):
                 is_this_a_sub_item_type = 'ind'; should_get_main_number = False 
-            elif current_content_substituted == "[FEE_TABLE_PLACEHOLDER]": 
+            elif content_with_placeholders_filled == "[FEE_TABLE_PLACEHOLDER]": 
                 should_get_main_number = False
-            # Content inside conditional blocks (indiv/corp/track) should not get main numbers
-            # unless it's a heading (which your example output now shows are numbered).
-            elif (current_line_is_within_indiv or current_line_is_within_corp or current_line_is_within_track) and not is_heading_lookalike:
-                # If it's plain text within a conditional block (and not a sub-item type), don't number.
-                if not is_this_a_sub_item_type : # Check again it's not already classified as sub-item
-                     should_get_main_number = False
+            # Content within conditional blocks (indiv/corp/track)
+            # Only headings get numbered if they are inside these blocks. Other text does not.
+            elif (current_line_effective_in_indiv or current_line_effective_in_corp or current_line_effective_track_block):
+                if not is_heading_lookalike: # If it's not a heading, it doesn't get a main number inside these blocks
+                    should_get_main_number = False
             
             if should_get_main_number:
                 main_paragraph_counter += 1
@@ -519,10 +485,10 @@ if st.button("Generate Client Care Letter"):
         
         # --- 6. Paragraph Rendering ---
         if current_line_original_stripped == "[]" and current_line_original_stripped != "[]To comply with our legal and regulatory obligations;": 
-            if doc.paragraphs and should_render_this_line_content: 
+            if doc.paragraphs and should_render_this_line: 
                  doc.paragraphs[-1].paragraph_format.space_after = Pt(12)
-        elif should_render_this_line_content and (final_content_after_all_stripping or current_line_original_stripped == ""): 
-            text_for_runs_final = paragraph_number_prefix + current_content_substituted
+        elif should_render_this_line and (final_content_for_runs or current_line_original_stripped == ""): 
+            text_to_render_in_runs = paragraph_number_prefix + content_with_placeholders_filled
             
             p = doc.add_paragraph()
             pf = p.paragraph_format
@@ -530,7 +496,7 @@ if st.button("Generate Client Care Letter"):
             
             para_style_to_apply = 'Normal'
             
-            if is_this_a_main_numbered_paragraph:
+            if is_this_a_main_numbered_paragraph: # Applies to numbered headings too
                 pf.left_indent = Cm(numbered_para_left_indent_cm)
                 pf.first_line_indent = Cm(numbered_para_first_line_indent_cm)
                 if pf.tab_stops: pf.tab_stops.clear_all()
@@ -543,57 +509,55 @@ if st.button("Generate Client Care Letter"):
                 
                 if is_this_a_sub_item_type == 'bp':
                     para_style_to_apply = 'ListBullet'
-                    text_for_runs_final = current_content_substituted.replace("[bp]", "", 1).lstrip() # Remove tag
+                    text_to_render_in_runs = content_with_placeholders_filled.replace("[bp]", "", 1).lstrip() # No number prefix for bullets
                 elif is_this_a_sub_item_type == 'ind':
                      pf.left_indent = Cm(ind_item_indent_cm) 
                      pf.first_line_indent = Cm(0) 
                      if pf.tab_stops: pf.tab_stops.clear_all()
-                     text_for_runs_final = current_content_substituted.replace("[ind]", "", 1).lstrip()
+                     text_to_render_in_runs = content_with_placeholders_filled.replace("[ind]", "", 1).lstrip() # No number prefix
                 elif is_this_a_sub_item_type == 'ab': 
-                    match_ab = re.match(r'\[([a-g])\](.*)', final_content_after_all_stripping) 
+                    match_ab = re.match(r'\[([a-g])\](.*)', final_content_for_runs) # Use pre-placeholder content for regex
                     if match_ab:
-                        text_for_runs_final = f"({match_ab.group(1)})\t" + match_ab.group(2).lstrip()
-            
-            # For headings that are *not* main numbered (e.g., unnumbered section title if any)
-            # or headings that *are* numbered but might need slightly different formatting than standard numbered paras
-            if is_heading_lookalike:
-                if not is_this_a_main_numbered_paragraph : # If it's an unnumbered heading
-                    pf.alignment = None 
-                    pf.left_indent = Cm(0); pf.first_line_indent = Cm(0)
-                    if pf.tab_stops: pf.tab_stops.clear_all()
-                # If it IS a main numbered paragraph, it already got the numbered_para formatting.
-                # Add bolding for the heading text runs if not already handled by [bold] tag
-                # This is implicitly handled by add_runs_from_text if [bold] is in current_content_substituted
+                        text_to_render_in_runs = f"({match_ab.group(1)})\t" + app_inputs.get(f"qu{match_ab.group(1)}_text", match_ab.group(2).lstrip()) # Example if [a] content was dynamic
+                        # If [a] content is static from precedent_content, it's already in content_with_placeholders_filled
+                        # So, we need to re-substitute if necessary or just format.
+                        # Using final_content_for_runs for regex helps get original text after [a]
+                        text_to_render_in_runs = f"({match_ab.group(1)})\t" + content_with_placeholders_filled.replace(f"[{match_ab.group(1)}]", "", 1).lstrip()
+
+
+            elif is_heading_lookalike: # Unnumbered headings (if any, though now most are numbered)
+                pf.alignment = None 
+                pf.left_indent = Cm(0); pf.first_line_indent = Cm(0)
+                if pf.tab_stops: pf.tab_stops.clear_all()
             
             if para_style_to_apply != 'Normal': p.style = para_style_to_apply
 
-            if current_content_substituted == "[FEE_TABLE_PLACEHOLDER]":
+            if content_with_placeholders_filled == "[FEE_TABLE_PLACEHOLDER]":
                 pf.alignment = WD_ALIGN_PARAGRAPH.LEFT 
                 pf.left_indent = Cm(0); pf.first_line_indent = Cm(0)
                 if pf.tab_stops: pf.tab_stops.clear_all()
-                
-                # Clear the content of the paragraph 'p' that was created for the placeholder
+                # Clear the placeholder text from the current paragraph 'p'
                 for r_idx in range(len(p.runs)): p.runs[r_idx].clear()
-                if p.text: p.text = "" 
+                if p.text : p.text = "" 
                 
                 fee_lines = app_inputs['fee_table_content'].split('\n')
                 for fee_idx, fee_line in enumerate(fee_lines):
-                    p_fee = doc.add_paragraph() # Always add new paras for fee lines for clarity
+                    p_fee = doc.add_paragraph() 
                     p_fee.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.LEFT 
                     p_fee.paragraph_format.space_after = Pt(6); 
                     add_runs_from_text(p_fee, fee_line, app_inputs)
                 if doc.paragraphs and len(doc.paragraphs[-1].text.strip()) > 0 : 
                     doc.paragraphs[-1].paragraph_format.space_after = Pt(0)
-            elif final_content_after_all_stripping or current_line_original_stripped == "": 
-                add_runs_from_text(p, text_for_runs_final, app_inputs)
+            elif final_content_for_runs or current_line_original_stripped == "": 
+                add_runs_from_text(p, text_to_render_in_runs, app_inputs)
             
             if p.text or p.runs or current_line_original_stripped == "":
                  pf.space_after = Pt(0) 
 
         # --- 7. Update global block states if an end tag was processed on THIS line ---
-        if _line_will_end_indiv: in_indiv_block_active = False
-        if _line_will_end_corp: in_corp_block_active = False
-        if _line_will_end_track: active_track_block_type_global = None
+        if _line_will_end_indiv: g_in_indiv_block = False
+        if _line_will_end_corp: g_in_corp_block = False
+        if _line_will_end_track: g_active_track_block = None
         
     if doc.paragraphs and doc.paragraphs[-1].paragraph_format.space_after == Pt(0):
         doc.paragraphs[-1].paragraph_format.space_after = Pt(6)
