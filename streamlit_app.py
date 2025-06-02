@@ -34,7 +34,7 @@ def add_runs_from_text(paragraph, text_line, app_inputs):
 # --- Ramsdens Color Palette (approximations) ---
 RAMSDENS_NAVY = "#003366"  # A common navy blue, adjust if a more specific one is found
 RAMSDENS_TEAL = "#008080"  # A standard teal, adjust
-RAMSDENS_LIGHT_GREY_BG = "#f0f2f6" # Light grey for secondary background
+RAMSDENS_LIGHT_GREY_BG = "#022933" # Light grey for secondary background
 RAMSDENS_TEXT_COLOR = "#333333" # Dark grey for text
 RAMSDENS_WHITE = "#FFFFFF"
 
