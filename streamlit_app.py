@@ -73,24 +73,24 @@ Further to our recent discussions, we now write to confirm the terms under which
 []
 We enclose with this letter our Terms and Conditions of Business which must be read in conjunction with this letter. These documents are a formal communication and the language used is reflective of that. We hope that you understand. Please take the time to read these documents carefully. Where there is any conflict between this letter and our Terms and Conditions of Business, the terms of this letter will prevail. Your continuing instructions in this matter will amount to your acceptance of our Terms and Conditions of Business.
 []
-[bold]Your Instructions[end]
+[bold]Your Instructions[end bold]
 []
-We are instructed in relation to [qu 1 set out the nature of the dispute - start and end lower case] [bold](“the Dispute”)[end]. Per our recent discussions [qu 2 set out the immediate steps that will be taken (this maybe a review of the facts and papers to allow you to advise in writing or making initial court applications or taking the first step, prosecuting or defending in a mainstream action). If you have agreed to engage counsel or other third party to assist you should also say so here – start and end lower case] [bold](“the Work”)[end].
+We are instructed in relation to [qu 1 set out the nature of the dispute - start and end lower case] [bold](“the Dispute”)[end bold]. Per our recent discussions [qu 2 set out the immediate steps that will be taken (this maybe a review of the facts and papers to allow you to advise in writing or making initial court applications or taking the first step, prosecuting or defending in a mainstream action). If you have agreed to engage counsel or other third party to assist you should also say so here – start and end lower case] [bold](“the Work”)[end bold].
 []
 This matter may develop over time and the nature of disputes is that opposing parties often seek to present facts and matters in a way that is favourable to their own case. We therefore cannot predict every eventuality but we will work with you to advise on any significant developments and review the overall strategy should that be required. Insofar as changes in the future may have a material impact on any cost estimates provided, we will discuss that with you. We will notify you of any material changes by telephone or in correspondence and we will of course always confirm any verbal advice in writing whenever you request that from us.
 []
-[bold]Timescales[end]
+[bold]Timescales[end bold]
 []
 [qu3 Explain the estimated time scales to complete the Work. Start capital and end full stop]
 []
-[bold]Action Required To Be Taken By You[end]
+[bold]Action Required To Be Taken By You[end bold]
 []
-[underline]Client Identification and Money Laundering[end]
+[underline]Client Identification and Money Laundering[end underline]
 []
-[indiv]Solicitors are required by law to obtain evidence of their client’s identity and address to satisfy money laundering and client identification regulations. This includes clients that are corporate entities.[end indiv]
-[corp]Solicitors are required by law to obtain evidence of their client’s identity and address to satisfy money laundering and client identification regulations. This includes clients that are corporate entities.
-[a]We will make our own enquiries and obtain documentation from Companies House to identify our corporate client. If you believe Companies House’s records to be out of date, please let us know as soon as possible. We may also require documentation or information from the company itself.
-[b]We are also obliged to identify the individuals at the corporate client who provide us with instructions, which usually means directors of limited companies or members/partners in LLPs, and sometimes we must do the same for “beneficial owners”. Either situation may include you as the recipient of this letter, but may also include other people at the business. We will tell you who else may be required to provide identification.[end corp]
+[indiv]Solicitors are required by law to obtain evidence of their client’s identity and address to satisfy money laundering and client identification regulations. This includes clients that are corporate entities. [end indiv]
+[corp]Solicitors are required by law to obtain evidence of their client’s identity and address to satisfy money laundering and client identification regulations. This includes clients that are corporate entities.[end corp]
+[corp] [a]We will make our own enquiries and obtain documentation from Companies House to identify our corporate client. If you believe Companies House’s records to be out of date, please let us know as soon as possible. We may also require documentation or information from the company itself. [end corp]
+[corp] [b]We are also obliged to identify the individuals at the corporate client who provide us with instructions, which usually means directors of limited companies or members/partners in LLPs, and sometimes we must do the same for “beneficial owners”. Either situation may include you as the recipient of this letter, but may also include other people at the business. We will tell you who else may be required to provide identification.[end corp]
 []
 To comply with the individual identity requirement, you have two options:
 []
@@ -105,11 +105,11 @@ You can provide us with two documents referred to in the list below, one photogr
 []
 Please note that until these identification requirements have been satisfied, we may not be able to accept any money from you or make any substantial progress with your matter. It is therefore important that you provide your documents as soon as possible to avoid any delays.
 []
-[underline]Document Preservation and Disclosure[end]
+[underline]Document Preservation and Disclosure[end underline]
 []
 In the event that your matter is litigated before a Court, all parties will be required to give full disclosure of all material relevant to the Dispute. It is therefore essential that you preserve any and all such material that includes correspondence, documents, emails, text and SMS messages and/or other electronic communications of any sort. Your disclosure obligations include an obligation to disclose material that may harm your case or help your opponent’s case, as well as those on which you may rely or which help. If any device on which any such material is stored is to be disposed of or ceases to be used, you must ensure that copies are kept of the material.
 []
-[bold]People Responsible For Your Case[end]
+[bold]People Responsible For Your Case[end bold]
 []
 I shall be the person with responsibility for your case. My name is {person_responsible_name} and I am a {person_responsible_title} with the firm. My work will be carried out under the supervision of {supervisor_name} who is a {supervisor_title} of the firm.
 []
@@ -121,9 +121,9 @@ At Ramsdens we aim to provide the best possible service to our clients and in or
 []
 You also have a right to complain about any bill sent by us by applying to the Court for an assessment of the bill under Part III of the Solicitors Act 1974.
 []
-[bold]Costs and Disbursements[end]
+[bold]Costs and Disbursements[end bold]
 []
-[underline]Costs[end]
+[underline]Costs[end underline]
 []
 Our charges to you will be calculated and incurred on a time-spent basis. Time will be recorded on your matter in units of six minutes for letters (generally representing a unit per page or part thereof), emails written (again, representing a unit per equivalent to a page of normal letter) and telephone calls made and received.
 []
@@ -133,13 +133,13 @@ Our current hourly charge-out rates, exclusive of VAT, are as follows:
 []
 Our hourly charge-out rates are reviewed periodically and we will notify you of any increases. We will also notify you of any changes in the status of legal personnel and their hourly charge-out rate. Unless otherwise agreed with you, we will account to you every month for the fees that have been incurred in relation to this matter. If you require an up to date statement of fees incurred at any time then please ask us and we will provide you with that information. Unless otherwise stated, interim bills are on account of costs and are usually prepared taking into account the value of the time recorded against the matter as at the date of the interim bill. If we hold any monies on account of your costs when an invoice is raised, these monies will be utilised towards discharging the invoice.
 []
-[underline]Disbursements[end]
+[underline]Disbursements[end underline]
 []
 Our hourly charge-out rates do not include expenses for which we will be responsible on your behalf. These expenses are referred to as disbursements and may include travel or accommodation expenses, Court fees or the costs of Barristers or expert witnesses. Where possible, we will endeavour to seek your permission prior to instructing a third party in relation to your matter.
 []
 We will not pay out any disbursements on your behalf until the monies have been paid by you.
 []
-[underline]Legal Expenses Insurance[end]
+[underline]Legal Expenses Insurance[end underline]
 []
 [indiv]It may be that you or a member of your household has the benefit of legal expenses insurance that might cover you for legal costs in connection with this matter. If you wish us tocheck your eligibility, please let us have a copy of the relevant insurance schedule and policy document. Alternatively you may be entitled to have your liability for costs paid by another person; for example, an employer or Trade Union. Again, please let us know if you wish us to assist you in checking such eligibility. Please note that you will remain responsible for our charges until such time as any legal expenses insurers have agreed to cover you for our legal costs.[end indiv]
 [corp]It may be possible to purchase “After the Event” legal expenses insurance cover to cover your opponents, or, possibly, your costs in this matter. If you wish to explore the possibility of such insurance cover, please let us know. Please bear in mind, though, that there will be costs involved in making an application for cover, and it is likely that a large premium (the amount of which will depend on the amount of costs protected and the prospects of success) will be payable at the outset and possibly on any subsequent anniversary of the inception of the policy.[end corp]
@@ -148,7 +148,7 @@ We will not pay out any disbursements on your behalf until the monies have been 
 []
 Our charges to you are not contingent upon the result of your case. You are primarily responsible for the payment of our costs and disbursements. Whilst we may be able to recover a portion of your costs from your opponent, this is not always possible and does not affect your primary responsibility to pay our costs and disbursements.
 []
-[underline]Section 74 Solicitors Act 1974 Agreement & Recovery of Costs[end]
+[underline]Section 74 Solicitors Act 1974 Agreement & Recovery of Costs[end underline]
 []
 It is common in litigation that even where costs are recoverable from an opponent, such recovery will not equate to the level of costs incurred by the successful party. Our agreement expressly permits us to charge an amount of costs greater than that which you will recover or could have recovered from your opponent, and expressly permits payment of such sum.
 []
@@ -164,7 +164,7 @@ If a Court orders your opponent to pay your costs, you should be aware that:
 [f]There may be points during your case (including at its conclusion) where you are successful only in part on the issues in it, as a result of which you are entitled to payment of some of your costs by your opponent.
 [g]If your opponent receives funding from the Community Legal Service, there are statutory controls on the amount of costs that can be recovered from them. In these circumstances, it is highly unlikely that the Court will make an order that your opponent would have to contribute anything to your costs.
 []
-[underline]Fixed Recoverable Costs[end]
+[underline]Fixed Recoverable Costs[end underline]
 []
 Depending upon the value and complexity of a claim, the Court will allocate it to one of four ‘tracks’ when managing the case. If a claim is successful and a Court orders one party to pay the other’s costs, the amount of the costs that can be recovered may be fixed by the Court.
 []
