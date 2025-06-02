@@ -2,7 +2,6 @@ import streamlit as st
 from docx import Document
 from docx.shared import Pt, Inches
 from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
-# from docx.enum.style import WD_STYLE_TYPE # For custom styles if needed
 import io
 from datetime import datetime
 import re
@@ -15,121 +14,73 @@ def add_runs_from_text(paragraph, text_line, app_inputs):
     text_line = text_line.replace("[qu3 Explain the estimated time scales to complete the Work. Start capital and end full stop]", app_inputs.get('qu3_timescales', ""))
     text_line = text_line.replace("£ [qu4_ what is the value of the estimated initial costs xx,xxx?]", f"£{app_inputs.get('qu4_initial_costs_estimate', 'XX,XXX')}")
 
-
-    # Regex to split by bold, italic, underline tags but keep the delimiters
     parts = re.split(r'(\[bold\]|\[end bold\]|\[italics\]|\[end italics\]|\[underline\]|\[end underline\]|\[end\])', text_line)
-
     is_bold = False
     is_italic = False
     is_underline = False
 
     for part in parts:
-        if not part:
-            continue
-        if part == "[bold]":
-            is_bold = True
-        elif part == "[end bold]" or (part == "[end]" and is_bold): # General [end] might terminate current style
-            is_bold = False
-        elif part == "[italics]":
-            is_italic = True
-        elif part == "[end italics]" or (part == "[end]" and is_italic):
-            is_italic = False
-        elif part == "[underline]":
-            is_underline = True
-        elif part == "[end underline]" or (part == "[end]" and is_underline):
-            is_underline = False
-        elif part == "[end]": # General catch-all for [end] if not matched above
-            is_bold = False
-            is_italic = False
-            is_underline = False
+        if not part: continue
+        if part == "[bold]": is_bold = True
+        elif part == "[end bold]" or (part == "[end]" and is_bold): is_bold = False
+        elif part == "[italics]": is_italic = True
+        elif part == "[end italics]" or (part == "[end]" and is_italic): is_italic = False
+        elif part == "[underline]": is_underline = True
+        elif part == "[end underline]" or (part == "[end]" and is_underline): is_underline = False
+        elif part == "[end]": # General catch-all
+            is_bold = False; is_italic = False; is_underline = False
         else:
             run = paragraph.add_run(part)
-            if is_bold:
-                run.bold = True
-            if is_italic:
-                run.italic = True
-            if is_underline:
-                run.underline = True
-            # Set font for each run if a default is desired and not handled by style
+            if is_bold: run.bold = True
+            if is_italic: run.italic = True
+            if is_underline: run.underline = True
             run.font.name = 'Arial'
             run.font.size = Pt(11)
 
-
-# --- Streamlit App UI ---
+# Streamlit UI (same as before) ...
 st.set_page_config(layout="wide")
 st.title("Ramsdens Client Care Letter Generator")
 
-# --- Global/Firm Inputs (Mostly hardcoded from precedent for strictness) ---
-# These would typically be dynamic inputs in a real-world general app
 firm_details = {
-    "name": "Ramsdens Solicitors LLP",
-    "short_name": "Ramsdens",
-    "person_responsible_name": "Paul Pinder",
-    "person_responsible_title": "Senior Associate",
-    "supervisor_name": "Nick Armitage",
-    "supervisor_title": "Partner",
-    "person_responsible_phone": "01484 821558",
-    "person_responsible_mobile": "07923 250815",
-    "person_responsible_email": "paul.pinder@ramsdens.co.uk",
-    "assistant_name": "Reece Collier",
+    "name": "Ramsdens Solicitors LLP", "short_name": "Ramsdens",
+    "person_responsible_name": "Paul Pinder", "person_responsible_title": "Senior Associate",
+    "supervisor_name": "Nick Armitage", "supervisor_title": "Partner",
+    "person_responsible_phone": "01484 821558", "person_responsible_mobile": "07923 250815",
+    "person_responsible_email": "paul.pinder@ramsdens.co.uk", "assistant_name": "Reece Collier",
     "supervisor_contact_for_complaints": "Nick Armitage on 01484 507121",
-    "bank_name": "Barclays Bank PLC",
-    "bank_address": "17 Market Place, Huddersfield",
-    "account_name": "Ramsdens Solicitors LLP Client Account",
-    "sort_code": "20-43-12",
-    "account_number": "03909026",
-    "marketing_email": "dataprotection@ramsdens.co.uk",
+    "bank_name": "Barclays Bank PLC", "bank_address": "17 Market Place, Huddersfield",
+    "account_name": "Ramsdens Solicitors LLP Client Account", "sort_code": "20-43-12",
+    "account_number": "03909026", "marketing_email": "dataprotection@ramsdens.co.uk",
     "marketing_address": "Ramsdens Solicitors LLP, Oakley House, 1 Hungerford Road, Edgerton, Huddersfield, HD3 3AL"
 }
-
 st.sidebar.header("Letter Details")
 our_ref = st.sidebar.text_input("Our Reference", "PP/LEGAL/RAM001/001")
 your_ref = st.sidebar.text_input("Your Reference (if any)", "")
 letter_date = st.sidebar.date_input("Letter Date", datetime.today())
-
 st.sidebar.header("Client Information")
 client_name_input = st.sidebar.text_input("Client Full Name / Company Name", "Mr. John Smith")
 client_address_line1 = st.sidebar.text_input("Client Address Line 1", "123 Example Street")
 client_address_line2 = st.sidebar.text_input("Client Address Line 2", "SomeTown")
 client_postcode = st.sidebar.text_input("Client Postcode", "EX4 MPL")
 client_type = st.sidebar.radio("Client Type:", ("Individual", "Corporate"), key="client_type_radio")
-
 st.sidebar.header("Case Details")
-claim_assigned = st.sidebar.radio("Is the claim already assigned to a court track?",
-                                   ("Yes", "No"), key="claim_assigned_radio")
+claim_assigned_input = st.sidebar.radio("Is the claim already assigned to a court track?", ("Yes", "No"), key="claim_assigned_radio")
 track_options = ["Small Claims Track", "Fast Track", "Intermediate Track", "Multi Track"]
-selected_track = st.sidebar.selectbox("Which court track applies or is anticipated?", track_options, key="track_select")
-
-
+selected_track_input = st.sidebar.selectbox("Which court track applies or is anticipated?", track_options, key="track_select")
 st.header("Dynamic Content (Answers to Questions)")
-qu1_dispute_nature = st.text_area("Q1: Nature of the Dispute (for 'the Dispute')",
-                                  "a contractual matter related to services provided", height=75)
-qu2_initial_steps = st.text_area("Q2: Immediate Steps to be Taken (for 'the Work')",
-                                 "review the documentation you have provided and advise you on the merits of your position and potential next steps. we will also prepare an initial letter to the other side", height=150)
-qu3_timescales = st.text_area("Q3: Estimated Timescales for 'the Work'",
-                              "We estimate that the initial Work will take approximately 2-4 weeks to complete, depending on the complexity and responsiveness of other parties. We will keep you updated on progress.", height=100)
-qu4_initial_costs_estimate = st.text_input("Q4: Estimated Initial Costs for 'the Work' (e.g., 1,500)", "1,500")
-
-fee_table_content = st.text_area("Fee Table Content (to be inserted in 'Costs and Disbursements')",
-                                 "Partner: £XXX per hour\nSenior Associate: £YYY per hour\nSolicitor: £ZZZ per hour\nParalegal: £AAA per hour",
-                                 height=150)
+qu1_dispute_nature_input = st.text_area("Q1: Nature of the Dispute (for 'the Dispute')", "a contractual matter related to services provided", height=75)
+qu2_initial_steps_input = st.text_area("Q2: Immediate Steps to be Taken (for 'the Work')", "review the documentation you have provided and advise you on the merits of your position and potential next steps. we will also prepare an initial letter to the other side", height=150)
+qu3_timescales_input = st.text_area("Q3: Estimated Timescales for 'the Work'", "We estimate that the initial Work will take approximately 2-4 weeks to complete, depending on the complexity and responsiveness of other parties. We will keep you updated on progress.", height=100)
+qu4_initial_costs_estimate_input = st.text_input("Q4: Estimated Initial Costs for 'the Work' (e.g., 1,500)", "1,500")
+fee_table_content_input = st.text_area("Fee Table Content (to be inserted in 'Costs and Disbursements')", "Partner: £XXX per hour\nSenior Associate: £YYY per hour\nSolicitor: £ZZZ per hour\nParalegal: £AAA per hour", height=150)
 
 app_inputs = {
-    'qu1_dispute_nature': qu1_dispute_nature,
-    'qu2_initial_steps': qu2_initial_steps,
-    'qu3_timescales': qu3_timescales,
-    'qu4_initial_costs_estimate': qu4_initial_costs_estimate,
-    'fee_table_content': fee_table_content,
-    'client_type': client_type,
-    'claim_assigned': claim_assigned == "Yes", # Boolean
-    'selected_track': selected_track
+    'qu1_dispute_nature': qu1_dispute_nature_input, 'qu2_initial_steps': qu2_initial_steps_input,
+    'qu3_timescales': qu3_timescales_input, 'qu4_initial_costs_estimate': qu4_initial_costs_estimate_input,
+    'fee_table_content': fee_table_content_input, 'client_type': client_type,
+    'claim_assigned': claim_assigned_input == "Yes", 'selected_track': selected_track_input
 }
-app_inputs.update(firm_details) # Add firm details to app_inputs for easy access if needed in text processing
-
-# --- Precedent Text (segmented for processing) ---
-# Each item in the list is a "line" from your formatted precedent.
-# "[]" on its own means a paragraph break with 12pt spacing.
-# Other tags will be handled by add_runs_from_text or direct formatting.
+app_inputs.update(firm_details)
 
 precedent_content = """
 Our Ref: {our_ref}
@@ -360,160 +311,180 @@ Solicitor
 
 if st.button("Generate Client Care Letter"):
     doc = Document()
-    
-    # Set default font for the document (Arial 11pt)
     style = doc.styles['Normal']
     font = style.font
     font.name = 'Arial'
     font.size = Pt(11)
 
-    # Process the precedent content
     lines = precedent_content.split('\n')
     
-    # State flags for conditional blocks (indiv/corp, tracks)
     in_indiv_block = False
     in_corp_block = False
-    active_track_block = None # Stores 'all_sc', 'sc', etc.
+    active_track_block = None
+    
+    track_tags_map = {
+        '[all_sc]': ("Yes", "Small Claims Track"), '[all_ft]': ("Yes", "Fast Track"),
+        '[all_int]': ("Yes", "Intermediate Track"), '[all_mt]': ("Yes", "Multi Track"),
+        '[sc]': ("No", "Small Claims Track"), '[ft]': ("No", "Fast Track"),
+        '[int]': ("No", "Intermediate Track"), '[mt]': ("No", "Multi Track")
+    }
+    end_track_tags_map = {v[0]+v[1]: k for k, v in track_tags_map.items()} # Helper to find start tag from end tag content
 
     for line_raw in lines:
         line = line_raw.strip()
-
-        # Handle conditional block start/end tags
+        content_to_process = line 
+        
+        # --- 1. Handle PURE control lines (tags that are alone on a line) ---
         if line == "[indiv]": in_indiv_block = True; continue
         if line == "[end indiv]": in_indiv_block = False; continue
         if line == "[corp]": in_corp_block = True; continue
         if line == "[end corp]": in_corp_block = False; continue
-
-        track_tags = ['[all_sc]', '[all_ft]', '[all_int]', '[all_mt]', '[sc]', '[ft]', '[int]', '[mt]']
-        end_track_tags = ['[end all_sc]', '[end all_ft]', '[end all_int]', '[end all_mt]', '[end sc]', '[end ft]', '[end int]', '[end mt]']
         
-        is_track_start_tag = False
-        for tag in track_tags:
-            if line == tag:
-                active_track_block = tag
-                is_track_start_tag = True
-                break
-        if is_track_start_tag: continue
+        is_pure_track_control_tag = False
+        for tag_start, (assigned_status, track_name) in track_tags_map.items():
+            if line == tag_start:
+                active_track_block = tag_start
+                is_pure_track_control_tag = True; break
+            end_tag_candidate = f"[end {tag_start[1:-1]}]" # e.g. [end all_sc]
+            if line == end_tag_candidate and active_track_block == tag_start:
+                active_track_block = None
+                is_pure_track_control_tag = True; break
+        if is_pure_track_control_tag: continue
 
-        is_track_end_tag = False
-        for tag in end_track_tags:
-            if line == tag:
-                if active_track_block and tag == f"[end {active_track_block[1:-1]}]": # e.g. [end all_sc] matches active_track_block [all_sc]
-                    active_track_block = None
-                is_track_end_tag = True
-                break
-        if is_track_end_tag: continue
+        # --- 2. Process lines that might have content AND tags ---
+        # Strip tags and update block states for the current line's content
+        current_line_started_indiv = False
+        current_line_ended_indiv = False
+        current_line_started_corp = False
+        current_line_ended_corp = False
+        # Track tags on same line as content (simplified: assume tracks are pure or multi-line for now)
 
-        # Skip lines based on conditional flags
-        if in_indiv_block and app_inputs['client_type'] != "Individual": continue
-        if in_corp_block and app_inputs['client_type'] != "Corporate": continue
+        if content_to_process.startswith("[indiv]"):
+            current_line_started_indiv = True
+            content_to_process = content_to_process.removeprefix("[indiv]")
+        if content_to_process.endswith("[end indiv]"): # Check after prefix removal
+            current_line_ended_indiv = True
+            content_to_process = content_to_process.removesuffix("[end indiv]")
         
-        # Track condition logic
-        if active_track_block:
-            # Determine if the current active_track_block should be rendered
-            should_render_track = False
-            is_allocated = app_inputs['claim_assigned']
-            track = app_inputs['selected_track']
+        if content_to_process.startswith("[corp]"): # Use separate if, not elif
+            current_line_started_corp = True
+            content_to_process = content_to_process.removeprefix("[corp]")
+        if content_to_process.endswith("[end corp]"): # Check after prefix removal
+            current_line_ended_corp = True
+            content_to_process = content_to_process.removesuffix("[end corp]")
 
-            if active_track_block == '[all_sc]' and is_allocated and track == "Small Claims Track": should_render_track = True
-            elif active_track_block == '[all_ft]' and is_allocated and track == "Fast Track": should_render_track = True
-            elif active_track_block == '[all_int]' and is_allocated and track == "Intermediate Track": should_render_track = True
-            elif active_track_block == '[all_mt]' and is_allocated and track == "Multi Track": should_render_track = True
-            elif active_track_block == '[sc]' and not is_allocated and track == "Small Claims Track": should_render_track = True
-            elif active_track_block == '[ft]' and not is_allocated and track == "Fast Track": should_render_track = True
-            elif active_track_block == '[int]' and not is_allocated and track == "Intermediate Track": should_render_track = True
-            elif active_track_block == '[mt]' and not is_allocated and track == "Multi Track": should_render_track = True
+        # Update global state based on tags found on *this* line (if any)
+        if current_line_started_indiv: in_indiv_block = True
+        if current_line_started_corp: in_corp_block = True
             
-            if not should_render_track:
-                continue
-        
-        # --- Paragraph Creation and Formatting ---
-        current_paragraph_style = 'Normal'
-        left_indent_val = None
-        space_after_val = Pt(0) # Default, will be overridden by []
+        # --- 3. Determine if this line's content should be rendered ---
+        render_this_line = False
+        # Priority: client type blocks
+        if in_indiv_block: # If we are in an indiv block (either started this line or previously)
+            if app_inputs['client_type'] == "Individual":
+                render_this_line = True
+        elif in_corp_block: # If we are in a corp block
+            if app_inputs['client_type'] == "Corporate":
+                render_this_line = True
+        else: # Not in any client-type specific block
+            render_this_line = True
+            
+        # Secondary filter: track type, if applicable
+        if render_this_line and active_track_block:
+            should_render_due_to_track = False
+            target_assignment, target_track = track_tags_map[active_track_block]
+            
+            current_assignment_str = "Yes" if app_inputs['claim_assigned'] else "No"
+            current_track_str = app_inputs['selected_track']
 
-        if line == "[]":
-            if doc.paragraphs: # Set space after for the previous paragraph
-                 doc.paragraphs[-1].paragraph_format.space_after = Pt(12)
-            continue # Don't add an empty paragraph for "[]" itself unless it's for signature lines
+            if current_assignment_str == target_assignment and current_track_str == target_track:
+                should_render_due_to_track = True
+            
+            if not should_render_due_to_track:
+                render_this_line = False # Override if track doesn't match
 
-        # Placeholder substitutions for header/footer type info
-        line = line.replace("{our_ref}", our_ref)
-        line = line.replace("{your_ref}", your_ref)
-        line = line.replace("{letter_date}", letter_date.strftime('%d %B %Y'))
-        line = line.replace("{client_name_input}", client_name_input)
-        line = line.replace("{client_address_line1}", client_address_line1)
-        line = line.replace("{client_address_line2_conditional}", client_address_line2 if client_address_line2 else "")
-        line = line.replace("{client_postcode}", client_postcode)
-        
-        # Firm details placeholders (already in app_inputs)
-        for key, val in firm_details.items():
-            line = line.replace(f"{{{key}}}", str(val))
+        # --- 4. Render content if all conditions met ---
+        if render_this_line:
+            final_content_for_run = content_to_process.strip() # Strip whitespace from content part
+            
+            # Handle paragraph spacing marker "[]"
+            if line_raw.strip() == "[]": # Use line_raw to ensure it was originally just "[]"
+                if doc.paragraphs:
+                    doc.paragraphs[-1].paragraph_format.space_after = Pt(12)
+                continue # Handled spacing, next line
+
+            if not final_content_for_run and not line_raw.strip() == "": # Skip if content is empty after tag stripping, unless it was an empty line intended for spacing (like signature)
+                 pass # Effectively skip if only tags were on the line and stripped, or if it was an empty line not "[]"
+
+            else: # Process and add paragraph
+                # Substitute placeholders
+                current_content_substituted = final_content_for_run # Start with stripped content
+                current_content_substituted = current_content_substituted.replace("{our_ref}", our_ref)
+                current_content_substituted = current_content_substituted.replace("{your_ref}", your_ref)
+                current_content_substituted = current_content_substituted.replace("{letter_date}", letter_date.strftime('%d %B %Y'))
+                current_content_substituted = current_content_substituted.replace("{client_name_input}", client_name_input)
+                current_content_substituted = current_content_substituted.replace("{client_address_line1}", client_address_line1)
+                current_content_substituted = current_content_substituted.replace("{client_address_line2_conditional}", client_address_line2 if client_address_line2 else "")
+                current_content_substituted = current_content_substituted.replace("{client_postcode}", client_postcode)
+                for key, val in firm_details.items():
+                    current_content_substituted = current_content_substituted.replace(f"{{{key}}}", str(val))
+
+                if current_content_substituted == "[FEE_TABLE_PLACEHOLDER]":
+                    fee_lines = app_inputs['fee_table_content'].split('\n')
+                    for fee_line in fee_lines:
+                        p_fee = doc.add_paragraph()
+                        p_fee.paragraph_format.space_after = Pt(6)
+                        add_runs_from_text(p_fee, fee_line, app_inputs)
+                    if doc.paragraphs: doc.paragraphs[-1].paragraph_format.space_after = Pt(0)
+                    continue
+
+                # --- Actual Paragraph Creation ---
+                para_style = 'Normal'
+                para_prefix = ""
+                para_left_indent = None
+                para_space_after = Pt(0) # Default, overridden by next line being []
+
+                if current_content_substituted.startswith("[bp]"):
+                    para_style = 'ListBullet'
+                    current_content_substituted = current_content_substituted.replace("[bp]", "").lstrip()
+                    para_space_after = Pt(6)
+                # Handling for [a], [b] etc.
+                match_ab = re.match(r'\[([a-g])\](.*)', current_content_substituted)
+                if match_ab:
+                    para_prefix = f"({match_ab.group(1)}) "
+                    current_content_substituted = match_ab.group(2).lstrip()
+                elif current_content_substituted.startswith("[ind]"):
+                    para_left_indent = Inches(4 / 2.54)
+                    current_content_substituted = current_content_substituted.replace("[ind]", "").lstrip()
+
+                p = doc.add_paragraph(style=para_style if para_style != 'Normal' else None)
+                pf = p.paragraph_format
+                if para_left_indent: pf.left_indent = para_left_indent
+                pf.space_after = para_space_after
+                
+                # Add prefix before other runs if present
+                if para_prefix:
+                    run_prefix = p.add_run(para_prefix)
+                    run_prefix.font.name = 'Arial'
+                    run_prefix.font.size = Pt(11)
+
+                add_runs_from_text(p, current_content_substituted, app_inputs)
 
 
-        if line == "[FEE_TABLE_PLACEHOLDER]":
-            # Insert fee table content, potentially as multiple paragraphs
-            fee_lines = app_inputs['fee_table_content'].split('\n')
-            for fee_line in fee_lines:
-                p = doc.add_paragraph()
-                p.paragraph_format.space_after = Pt(6) # Standard spacing for fee lines
-                add_runs_from_text(p, fee_line, app_inputs)
-            if doc.paragraphs: # Ensure last paragraph of fee table has correct spacing if followed by []
-                 doc.paragraphs[-1].paragraph_format.space_after = Pt(0) 
-            continue
+        # --- 5. Update global state if block ended on this line ---
+        if current_line_ended_indiv: in_indiv_block = False
+        if current_line_ended_corp: in_corp_block = False
 
+    # Final spacing for the very last paragraph
+    if doc.paragraphs and doc.paragraphs[-1].paragraph_format.space_after == Pt(0):
+        doc.paragraphs[-1].paragraph_format.space_after = Pt(6)
 
-        # Handle formatting tags that define paragraph style or prefix
-        if line.startswith("[bp]"):
-            current_paragraph_style = 'ListBullet'
-            line = line.replace("[bp]", "").lstrip()
-            # Add a bit more space after bullet points if not followed by []
-            space_after_val = Pt(6)
-        elif line.startswith("[a]"): line = "(a) " + line.replace("[a]", "").lstrip()
-        elif line.startswith("[b]"): line = "(b) " + line.replace("[b]", "").lstrip()
-        elif line.startswith("[c]"): line = "(c) " + line.replace("[c]", "").lstrip()
-        elif line.startswith("[d]"): line = "(d) " + line.replace("[d]", "").lstrip()
-        elif line.startswith("[e]"): line = "(e) " + line.replace("[e]", "").lstrip()
-        elif line.startswith("[f]"): line = "(f) " + line.replace("[f]", "").lstrip()
-        elif line.startswith("[g]"): line = "(g) " + line.replace("[g]", "").lstrip()
-        elif line.startswith("[ind]"):
-            left_indent_val = Inches(4 / 2.54) # 4cm
-            line = line.replace("[ind]", "").lstrip()
-
-
-        # Add the paragraph
-        p = doc.add_paragraph(style=current_paragraph_style if current_paragraph_style != 'Normal' else None)
-        
-        # Apply paragraph-level formatting
-        pf = p.paragraph_format
-        if left_indent_val:
-            pf.left_indent = left_indent_val
-        pf.space_after = space_after_val # This will be overridden if next line is []
-
-        # Add runs with inline formatting
-        add_runs_from_text(p, line, app_inputs)
-        
-        # Ensure all paragraphs have Arial 11 if not styled otherwise
-        if current_paragraph_style == 'Normal': # Or apply to all if ListBullet doesn't inherit
-            for run in p.runs:
-                if not run.font.name: run.font.name = 'Arial'
-                if not run.font.size: run.font.size = Pt(11)
-
-
-    # Final spacing adjustment for the very last paragraph if it wasn't handled by a trailing []
-    if doc.paragraphs:
-        if doc.paragraphs[-1].paragraph_format.space_after == Pt(0): # If it's default 0
-            doc.paragraphs[-1].paragraph_format.space_after = Pt(6) # Give some standard spacing
-
-    # Save to buffer and provide download
     doc_io = io.BytesIO()
     doc.save(doc_io)
     doc_io.seek(0)
-
     st.success("Client Care Letter Generated!")
     st.download_button(
-        label="Download Word Document",
-        data=doc_io,
+        label="Download Word Document", data=doc_io,
         file_name=f"Client_Care_Letter_{client_name_input.replace(' ', '_')}.docx",
         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     )
