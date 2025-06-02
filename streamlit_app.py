@@ -1,193 +1,511 @@
 import streamlit as st
 from docx import Document
-from docx.shared import Pt
-from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.shared import Pt, Inches
+from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
+# from docx.enum.style import WD_STYLE_TYPE # For custom styles if needed
 import io
 from datetime import datetime
+import re
 
-# --- Helper function to add paragraphs with consistent spacing ---
-def add_formatted_paragraph(doc, text, bold=False, space_after_pt=6, is_heading=False, heading_level=1):
-    if is_heading:
-        p = doc.add_heading(text, level=heading_level)
-    else:
-        p = doc.add_paragraph()
-        run = p.add_run(text)
-        if bold:
-            run.bold = True
-    
-    # Set paragraph formatting (spacing)
-    pf = p.paragraph_format
-    pf.space_before = Pt(0) # No space before
-    pf.space_after = Pt(space_after_pt) # Default space after, adjust as needed from precedent
-    return p
+# --- Helper function to process inline formatting and placeholders ---
+def add_runs_from_text(paragraph, text_line, app_inputs):
+    # Replace placeholders first
+    text_line = text_line.replace("[qu 1 set out the nature of the dispute - start and end lower case]", app_inputs.get('qu1_dispute_nature', ""))
+    text_line = text_line.replace("[qu 2 set out the immediate steps that will be taken (this maybe a review of the facts and papers to allow you to advise in writing or making initial court applications or taking the first step, prosecuting or defending in a mainstream action). If you have agreed to engage counsel or other third party to assist you should also say so here – start and end lower case]", app_inputs.get('qu2_initial_steps', ""))
+    text_line = text_line.replace("[qu3 Explain the estimated time scales to complete the Work. Start capital and end full stop]", app_inputs.get('qu3_timescales', ""))
+    text_line = text_line.replace("£ [qu4_ what is the value of the estimated initial costs xx,xxx?]", f"£{app_inputs.get('qu4_initial_costs_estimate', 'XX,XXX')}")
+
+
+    # Regex to split by bold, italic, underline tags but keep the delimiters
+    parts = re.split(r'(\[bold\]|\[end bold\]|\[italics\]|\[end italics\]|\[underline\]|\[end underline\]|\[end\])', text_line)
+
+    is_bold = False
+    is_italic = False
+    is_underline = False
+
+    for part in parts:
+        if not part:
+            continue
+        if part == "[bold]":
+            is_bold = True
+        elif part == "[end bold]" or (part == "[end]" and is_bold): # General [end] might terminate current style
+            is_bold = False
+        elif part == "[italics]":
+            is_italic = True
+        elif part == "[end italics]" or (part == "[end]" and is_italic):
+            is_italic = False
+        elif part == "[underline]":
+            is_underline = True
+        elif part == "[end underline]" or (part == "[end]" and is_underline):
+            is_underline = False
+        elif part == "[end]": # General catch-all for [end] if not matched above
+            is_bold = False
+            is_italic = False
+            is_underline = False
+        else:
+            run = paragraph.add_run(part)
+            if is_bold:
+                run.bold = True
+            if is_italic:
+                run.italic = True
+            if is_underline:
+                run.underline = True
+            # Set font for each run if a default is desired and not handled by style
+            run.font.name = 'Arial'
+            run.font.size = Pt(11)
+
 
 # --- Streamlit App UI ---
 st.set_page_config(layout="wide")
-st.title("Client Care Letter Generator")
+st.title("Ramsdens Client Care Letter Generator")
 
-st.sidebar.header("Firm & Letter Details")
-our_ref = st.sidebar.text_input("Our Reference", "DEPT/INITIALS/001")
-your_ref = st.sidebar.text_input("Your Reference (if any)", "CLIENT/MATTER/001")
+# --- Global/Firm Inputs (Mostly hardcoded from precedent for strictness) ---
+# These would typically be dynamic inputs in a real-world general app
+firm_details = {
+    "name": "Ramsdens Solicitors LLP",
+    "short_name": "Ramsdens",
+    "person_responsible_name": "Paul Pinder",
+    "person_responsible_title": "Senior Associate",
+    "supervisor_name": "Nick Armitage",
+    "supervisor_title": "Partner",
+    "person_responsible_phone": "01484 821558",
+    "person_responsible_mobile": "07923 250815",
+    "person_responsible_email": "paul.pinder@ramsdens.co.uk",
+    "assistant_name": "Reece Collier",
+    "supervisor_contact_for_complaints": "Nick Armitage on 01484 507121",
+    "bank_name": "Barclays Bank PLC",
+    "bank_address": "17 Market Place, Huddersfield",
+    "account_name": "Ramsdens Solicitors LLP Client Account",
+    "sort_code": "20-43-12",
+    "account_number": "03909026",
+    "marketing_email": "dataprotection@ramsdens.co.uk",
+    "marketing_address": "Ramsdens Solicitors LLP, Oakley House, 1 Hungerford Road, Edgerton, Huddersfield, HD3 3AL"
+}
+
+st.sidebar.header("Letter Details")
+our_ref = st.sidebar.text_input("Our Reference", "PP/LEGAL/RAM001/001")
+your_ref = st.sidebar.text_input("Your Reference (if any)", "")
 letter_date = st.sidebar.date_input("Letter Date", datetime.today())
-firm_name = st.sidebar.text_input("Your Firm Name", "Your Law Firm LLP")
-complaints_partner_name = st.sidebar.text_input("Complaints Partner Name", "Jane Doe")
-complaints_partner_phone = st.sidebar.text_input("Complaints Partner Phone", "01234 567891")
-complaints_partner_email = st.sidebar.text_input("Complaints Partner Email", "jane.doe@yourfirm.com")
-bank_name = st.sidebar.text_input("Client Account Bank Name", "Global Bank Plc")
-interest_threshold = st.sidebar.text_input("Interest Payment Threshold (£)", "50.00")
-file_storage_years = st.sidebar.text_input("File Storage Years", "6")
 
+st.sidebar.header("Client Information")
+client_name_input = st.sidebar.text_input("Client Full Name / Company Name", "Mr. John Smith")
+client_address_line1 = st.sidebar.text_input("Client Address Line 1", "123 Example Street")
+client_address_line2 = st.sidebar.text_input("Client Address Line 2", "SomeTown")
+client_postcode = st.sidebar.text_input("Client Postcode", "EX4 MPL")
+client_type = st.sidebar.radio("Client Type:", ("Individual", "Corporate"), key="client_type_radio")
 
-st.header("Client Information")
-client_name = st.text_input("Client Full Name / Company Name", "Mr. John Smith")
-# client_address_line1 = st.text_input("Client Address Line 1") # Add if needed for letterhead
-# client_address_line2 = st.text_input("Client Address Line 2")
-# client_postcode = st.text_input("Client Postcode")
-
-client_type = st.radio("Client Type:", 
-                       ("Individual Client", "Corporate Client"), 
-                       key="client_type_radio")
-
-st.header("Dispute & Claim Details")
-q1_dispute_nature = st.text_area("Q1: What is the nature of the dispute?", 
-                                 "a contractual dispute regarding the supply of widgets",
-                                 height=100)
-
-claim_assigned = st.radio("Has the claim already been assigned to a court track?",
-                          ("Yes - claim HAS ALREADY been assigned", "No - claim IS TO BE assigned"), 
-                          key="claim_assigned_radio")
-
+st.sidebar.header("Case Details")
+claim_assigned = st.sidebar.radio("Is the claim already assigned to a court track?",
+                                   ("Yes", "No"), key="claim_assigned_radio")
 track_options = ["Small Claims Track", "Fast Track", "Intermediate Track", "Multi Track"]
-selected_track = st.selectbox("Which court track applies or is anticipated?", track_options, key="track_select")
+selected_track = st.sidebar.selectbox("Which court track applies or is anticipated?", track_options, key="track_select")
 
-st.header("Scope of Work & Pricing")
-q2_initial_advice = st.text_area("Q2: Set out the immediate steps that will be taken (this maybe a review of the facts and papers to allow you to advise in writing or making initial court applications or taking the first step, prosecuting or defending in a mainstream action). If you have agreed to engage counsel or other third party to assist you should also say so here.",
-                                 "we will review the provided documentation, assess the merits of your claim, and provide you with initial written advice on potential next steps within 14 days",
+
+st.header("Dynamic Content (Answers to Questions)")
+qu1_dispute_nature = st.text_area("Q1: Nature of the Dispute (for 'the Dispute')",
+                                  "a contractual matter related to services provided", height=75)
+qu2_initial_steps = st.text_area("Q2: Immediate Steps to be Taken (for 'the Work')",
+                                 "review the documentation you have provided and advise you on the merits of your position and potential next steps. we will also prepare an initial letter to the other side", height=150)
+qu3_timescales = st.text_area("Q3: Estimated Timescales for 'the Work'",
+                              "We estimate that the initial Work will take approximately 2-4 weeks to complete, depending on the complexity and responsiveness of other parties. We will keep you updated on progress.", height=100)
+qu4_initial_costs_estimate = st.text_input("Q4: Estimated Initial Costs for 'the Work' (e.g., 1,500)", "1,500")
+
+fee_table_content = st.text_area("Fee Table Content (to be inserted in 'Costs and Disbursements')",
+                                 "Partner: £XXX per hour\nSenior Associate: £YYY per hour\nSolicitor: £ZZZ per hour\nParalegal: £AAA per hour",
                                  height=150)
-q3_longer_term_instructions = st.text_area("Q3: Explain estimated time scale for completion of the Work)",
-                                           "The initial work will take around 14 days to complete and then the further work is likely to depend on the outcome of the initial letters. The Work is likely to take a total time period of two to three months depending on the other side.",
-                                           height=100)
-q4_pricing_info = st.text_area("Q4: From the information you have provided us with to date, we estimate that our costs for the Work will be £[x] plus VAT. What is x?",
-                               "1,000",
-                               height=150)
 
-st.header("Additional Financial Details")
-disbursements_info = st.text_area("Anticipated Disbursements (e.g., court fees, expert fees - state 'None anticipated at this stage' if applicable)",
-                                  "Court issue fees (approx. £XXX) and potentially barrister's fees for any hearing (approx. £YYY).",
-                                  height=100)
-billing_frequency = st.text_input("Billing Frequency (e.g., monthly, quarterly)", "monthly")
-payment_due_days = st.text_input("Payment Due In (days)", "28")
-interest_rate_over_base = st.text_input("Interest on Unpaid Bills (% over Base Rate)", "4")
+app_inputs = {
+    'qu1_dispute_nature': qu1_dispute_nature,
+    'qu2_initial_steps': qu2_initial_steps,
+    'qu3_timescales': qu3_timescales,
+    'qu4_initial_costs_estimate': qu4_initial_costs_estimate,
+    'fee_table_content': fee_table_content,
+    'client_type': client_type,
+    'claim_assigned': claim_assigned == "Yes", # Boolean
+    'selected_track': selected_track
+}
+app_inputs.update(firm_details) # Add firm details to app_inputs for easy access if needed in text processing
+
+# --- Precedent Text (segmented for processing) ---
+# Each item in the list is a "line" from your formatted precedent.
+# "[]" on its own means a paragraph break with 12pt spacing.
+# Other tags will be handled by add_runs_from_text or direct formatting.
+
+precedent_content = """
+Our Ref: {our_ref}
+Your Ref: {your_ref}
+Date: {letter_date}
+[]
+{client_name_input}
+{client_address_line1}
+{client_address_line2_conditional}
+{client_postcode}
+[]
+Dear {client_name_input},
+[]
+Further to our recent discussions, we now write to confirm the terms under which Ramsdens Solicitors LLP [bold](“Ramsdens”)[end] will act for you. As a firm that is regulated by the Solicitors Regulation Authority, we are required to send you this letter which contains specific and prescribed information.
+[]
+We enclose with this letter our Terms and Conditions of Business which must be read in conjunction with this letter. These documents are a formal communication and the language used is reflective of that. We hope that you understand. Please take the time to read these documents carefully. Where there is any conflict between this letter and our Terms and Conditions of Business, the terms of this letter will prevail. Your continuing instructions in this matter will amount to your acceptance of our Terms and Conditions of Business.
+[]
+[bold]Your Instructions[end]
+[]
+We are instructed in relation to [qu 1 set out the nature of the dispute - start and end lower case] [bold](“the Dispute”)[end]. Per our recent discussions [qu 2 set out the immediate steps that will be taken (this maybe a review of the facts and papers to allow you to advise in writing or making initial court applications or taking the first step, prosecuting or defending in a mainstream action). If you have agreed to engage counsel or other third party to assist you should also say so here – start and end lower case] [bold](“the Work”)[end].
+[]
+This matter may develop over time and the nature of disputes is that opposing parties often seek to present facts and matters in a way that is favourable to their own case. We therefore cannot predict every eventuality but we will work with you to advise on any significant developments and review the overall strategy should that be required. Insofar as changes in the future may have a material impact on any cost estimates provided, we will discuss that with you. We will notify you of any material changes by telephone or in correspondence and we will of course always confirm any verbal advice in writing whenever you request that from us.
+[]
+[bold]Timescales[end]
+[]
+[qu3 Explain the estimated time scales to complete the Work. Start capital and end full stop]
+[]
+[bold]Action Required To Be Taken By You[end]
+[]
+[underline]Client Identification and Money Laundering[end]
+[]
+[indiv]Solicitors are required by law to obtain evidence of their client’s identity and address to satisfy money laundering and client identification regulations. This includes clients that are corporate entities.[end indiv]
+[corp]Solicitors are required by law to obtain evidence of their client’s identity and address to satisfy money laundering and client identification regulations. This includes clients that are corporate entities.
+[a]We will make our own enquiries and obtain documentation from Companies House to identify our corporate client. If you believe Companies House’s records to be out of date, please let us know as soon as possible. We may also require documentation or information from the company itself.
+[b]We are also obliged to identify the individuals at the corporate client who provide us with instructions, which usually means directors of limited companies or members/partners in LLPs, and sometimes we must do the same for “beneficial owners”. Either situation may include you as the recipient of this letter, but may also include other people at the business. We will tell you who else may be required to provide identification.[end corp]
+[]
+To comply with the individual identity requirement, you have two options:
+[]
+We can carry out a remote ID verification of you and your ID documents using a SmartSearch facility. If you would like us to verify your identification remotely please provide your name, address, date of birth, personal email and mobile number. Once the search has been undertaken, SmartSearch will send you a text or email with a link to use on your smartphone which will require you to take a photo of your ID document and then yourself which it will then upload to its system that will check the document, provide us with a copy, and verify that you are the person on the ID document. The process is quick and easy, and avoids you having to send in ID documents to us. OR:
+[]
+You can provide us with two documents referred to in the list below, one photographic and one showing your current address. If you are local to any of our offices please call with your original documents and they will be copied whilst you wait and the copies forwarded to us.
+[bp]Current signed passport;
+[bp]Household utility bill;
+[bp]Residence permit issued by the Home Office to EEA nationals on sight of own country passport;
+[bp]Current UK or EEA photo-card driving licence; or
+[bp]National Identity Card containing a photograph.
+[]
+Please note that until these identification requirements have been satisfied, we may not be able to accept any money from you or make any substantial progress with your matter. It is therefore important that you provide your documents as soon as possible to avoid any delays.
+[]
+[underline]Document Preservation and Disclosure[end]
+[]
+In the event that your matter is litigated before a Court, all parties will be required to give full disclosure of all material relevant to the Dispute. It is therefore essential that you preserve any and all such material that includes correspondence, documents, emails, text and SMS messages and/or other electronic communications of any sort. Your disclosure obligations include an obligation to disclose material that may harm your case or help your opponent’s case, as well as those on which you may rely or which help. If any device on which any such material is stored is to be disposed of or ceases to be used, you must ensure that copies are kept of the material.
+[]
+[bold]People Responsible For Your Case[end]
+[]
+I shall be the person with responsibility for your case. My name is {person_responsible_name} and I am a {person_responsible_title} with the firm. My work will be carried out under the supervision of {supervisor_name} who is a {supervisor_title} of the firm.
+[]
+The easiest way to communicate with me will be either by telephone on {person_responsible_phone}, my mobile {person_responsible_mobile}, or via email to {person_responsible_email}.
+[]
+There may be occasions when I am not immediately available to speak or meet with you and in these circumstances you should ask to speak to my Assistant, {assistant_name} who will be able to help you.
+[]
+At Ramsdens we aim to provide the best possible service to our clients and in order to do this we may arrange for one of our client care team to contact you to discuss how we are doing and what we might do better. Please let us know if you would prefer not to be contacted by our team during our handling of your matter. We do however, need to know from you if you feel dissatisfied about the service you are receiving. Should you have any occasion to feel unhappy about our service please let me know straight away and I will discuss this with you. If you are unable to resolve matters with me and still have concerns regarding our service, contact {supervisor_contact_for_complaints} who will attempt to resolve your concerns with you. Formal complaints will be dealt with in accordance with our Firm's complaints procedures which can be provided on request. In the event you are not satisfied with our handling of your complaint you can contact the Legal Ombudsman, full details will be given as part of our complaints procedure.
+[]
+You also have a right to complain about any bill sent by us by applying to the Court for an assessment of the bill under Part III of the Solicitors Act 1974.
+[]
+[bold]Costs and Disbursements[end]
+[]
+[underline]Costs[end]
+[]
+Our charges to you will be calculated and incurred on a time-spent basis. Time will be recorded on your matter in units of six minutes for letters (generally representing a unit per page or part thereof), emails written (again, representing a unit per equivalent to a page of normal letter) and telephone calls made and received.
+[]
+Our current hourly charge-out rates, exclusive of VAT, are as follows:
+[]
+[FEE_TABLE_PLACEHOLDER]
+[]
+Our hourly charge-out rates are reviewed periodically and we will notify you of any increases. We will also notify you of any changes in the status of legal personnel and their hourly charge-out rate. Unless otherwise agreed with you, we will account to you every month for the fees that have been incurred in relation to this matter. If you require an up to date statement of fees incurred at any time then please ask us and we will provide you with that information. Unless otherwise stated, interim bills are on account of costs and are usually prepared taking into account the value of the time recorded against the matter as at the date of the interim bill. If we hold any monies on account of your costs when an invoice is raised, these monies will be utilised towards discharging the invoice.
+[]
+[underline]Disbursements[end]
+[]
+Our hourly charge-out rates do not include expenses for which we will be responsible on your behalf. These expenses are referred to as disbursements and may include travel or accommodation expenses, Court fees or the costs of Barristers or expert witnesses. Where possible, we will endeavour to seek your permission prior to instructing a third party in relation to your matter.
+[]
+We will not pay out any disbursements on your behalf until the monies have been paid by you.
+[]
+[underline]Legal Expenses Insurance[end]
+[]
+[indiv]It may be that you or a member of your household has the benefit of legal expenses insurance that might cover you for legal costs in connection with this matter. If you wish us to check your eligibility, please let us have a copy of the relevant insurance schedule and policy document. Alternatively you may be entitled to have your liability for costs paid by another person; for example, an employer or Trade Union. Again, please let us know if you wish us to assist you in checking such eligibility. Please note that you will remain responsible for our charges until such time as any legal expenses insurers have agreed to cover you for our legal costs.[end indiv]
+[corp]It may be possible to purchase “After the Event” legal expenses insurance cover to cover your opponents, or, possibly, your costs in this matter. If you wish to explore the possibility of such insurance cover, please let us know. Please bear in mind, though, that there will be costs involved in making an application for cover, and it is likely that a large premium (the amount of which will depend on the amount of costs protected and the prospects of success) will be payable at the outset and possibly on any subsequent anniversary of the inception of the policy.[end corp]
+[]
+[underline]Your Costs Responsibility to Ramsdens[end]
+[]
+Our charges to you are not contingent upon the result of your case. You are primarily responsible for the payment of our costs and disbursements. Whilst we may be able to recover a portion of your costs from your opponent, this is not always possible and does not affect your primary responsibility to pay our costs and disbursements.
+[]
+[underline]Section 74 Solicitors Act 1974 Agreement & Recovery of Costs[end]
+[]
+It is common in litigation that even where costs are recoverable from an opponent, such recovery will not equate to the level of costs incurred by the successful party. Our agreement expressly permits us to charge an amount of costs greater than that which you will recover or could have recovered from your opponent, and expressly permits payment of such sum.
+[]
+This part of our agreement is made under section 74(3) of the Solicitors Act 1974 and Civil Procedure Rules 46.9 (2) and (3).
+[]
+If a Court orders your opponent to pay your costs, you should be aware that:
+[]
+[a]You will have to pay the costs to us in the first instance and you may then be reimbursed when cleared funds are received from your opponent.
+[b]You are unlikely to recover the entirety of our charges from your opponent. In most cases there will be a shortfall between our charges to you and the amount of costs that you may recover from your opponent. This shortfall may arise because your claim is subject to the fixed recoverable costs regime (see below) or because there is a difference between our hourly charge-out rates and the guideline hourly charge-out rates that are considered by the Court when assessing some costs. In so far as any costs or disbursements are of an unusual nature or amount, these costs might not be recoverable from your opponent.
+[c]In the unlikely event that your claim is subject to the fixed recoverable costs regime (see below) and the fixed costs recoverable from your opponent exceed the level of our charges calculated and incurred on a time-spent basis, you agree that the charges due to us from you will be the amount of fixed costs recoverable from your opponent.
+[d]Your opponent may refuse to comply with the Court’s order. If they do not pay, then you may seek to enforce the Court’s order (for example by sending in the bailiffs or obtaining a charge over property owned by them). However, you should be aware that this itself costs more money and takes time.
+[e]Your opponent may have very little by way of assets or they may simply disappear. If this happens then you will not be able to recover your costs or indeed any other monies awarded to you. That is why it is important that in financial disputes you consider now whether your opponent has sufficient assets to pay you a lump sum or instalments as appropriate.
+[f]There may be points during your case (including at its conclusion) where you are successful only in part on the issues in it, as a result of which you are entitled to payment of some of your costs by your opponent.
+[g]If your opponent receives funding from the Community Legal Service, there are statutory controls on the amount of costs that can be recovered from them. In these circumstances, it is highly unlikely that the Court will make an order that your opponent would have to contribute anything to your costs.
+[]
+[underline]Fixed Recoverable Costs[end]
+[]
+Depending upon the value and complexity of a claim, the Court will allocate it to one of four ‘tracks’ when managing the case. If a claim is successful and a Court orders one party to pay the other’s costs, the amount of the costs that can be recovered may be fixed by the Court.
+[]
+[all_sc]From the information that you have supplied us with, the claim has already been allocated to the Small Claims Track which is the normal track for claims with a monetary value of £10,000 or less.
+[]
+Having been allocated to the Small Claims Track, the normal rule is that only the following limited costs are recoverable by a successful party:
+[bp]Any Court fees paid.
+[bp]Fixed issue costs ranging between £50 and £125.
+[bp]Loss of earnings not exceeding £95 per person per day.
+[bp]Expenses reasonably incurred in travelling to and from and attending a Court hearing
+[bp]A sum not exceeding £750 for any expert’s fees.
+[]
+There are some exceptions to the normal rule and the Court can award costs against a party that has acted unreasonably. However, in practice such awards are rare.[end all_sc]
+[all_ft]From the information that you have supplied us with, the claim has already been allocated to the Fast Track which is the normal track for claims with a monetary value of between £10,000 and £25,000.
+[]
+Having been allocated to the Fast Track, the Court has also assigned your/your opponent’s claim to a Band 1/2/3/4. This means that as the Claimant/Defendant in the proceedings, we know that the costs that may be recoverable from your opponent/you will be fixed dependent upon the stage of the proceedings in which the claim is resolved. A table setting out these fixed recoverable costs is enclosed with this letter.[end all_ft]
+[all_int]From the information that you have supplied us with, the claim has already been allocated to the Intermediate Track which is the normal track for claims with a monetary value of between £25,000 and £100,000.
+[]
+Having been allocated to the Intermediate Track, the Court has also assigned your/your opponent’s claim to Band 1/2/3/4. This means that as the Claimant/Defendant in the proceedings, we know that the costs that may be recoverable from your opponent/you will be fixed dependent upon the stage of the proceedings in which the claim is resolved. A table setting out these fixed recoverable costs is enclosed with this letter.[end all_int]
+[all_mt]From the information that you have supplied us with, the claim has already been allocated to the Multi-Track which is the normal track for claims with a monetary value of over £100,000.
+[]
+Having been allocated to the Multi-Track, this means that the fixed costs regime does not apply to your/your opponent’s claim and the general rule that the ‘loser pays the winner’s costs’ will apply, subject to any costs budgeting that has been implemented by the Court and the caveats set out above under the heading [italics]Section 74 Solicitors Act 1974 Agreement & Recovery of Costs[end italics].[end all_mt]
+[sc]From the information that you have supplied us with, it is likely that were Court proceedings to be commenced, the claim would be allocated to the Small Claims Track which is the normal track for claims with a monetary value of £10,000 or less.
+[]
+Upon allocation to the Small Claims Track, the normal rule is that only the following limited costs are recoverable by a successful party:
+[]
+[bp]Any Court fees paid.
+[bp]Fixed issue costs ranging between £50 and £125.
+[bp]Loss of earnings not exceeding £95 per person per day.
+[bp]Expenses reasonably incurred in travelling to and from and attending a Court hearing
+[bp]A sum not exceeding £750 for any expert’s fees.
+[]
+There are some exceptions to the normal rule and the Court can award costs against a party that has acted unreasonably. However, in practice such awards are rare.[end sc]
+[ft]From the information that you have supplied us with, it is likely that were Court proceedings to be commenced, the claim would be allocated to the Fast Track which is the normal track for claims with a monetary value of between £10,000 and £25,000.
+[]
+Upon allocation to the Fast Track, the Court will assign your/your opponent’s claim to one of four ‘bands’ depending upon the complexity and number of issues in the claim. When the claim is assigned, as the Claimant/Defendant in the proceedings, we will know that the costs that may be recoverable from your opponent/you will be fixed dependent upon the stage of the proceedings in which the claim is resolved. A table setting out these fixed recoverable costs is enclosed with this letter.[end ft]
+[int]From the information that you have supplied us with, it is likely that were Court proceedings to be commenced, the claim would be allocated to the Intermediate Track which is the normal track for claims with a monetary value of between £25,000 and £100,000.
+[]
+Upon allocation to the Intermediate Track, the Court will assign your/your opponent’s claim to one of four ‘bands’ depending upon the complexity and number of issues in the claim. When the claim is assigned, as the Claimant/Defendant in the proceedings, we will know that the costs that may be recoverable from your opponent/you will be fixed dependent upon the stage of the proceedings in which the claim is resolved. A table setting out these fixed recoverable costs is enclosed with this letter.[end int]
+[mt]From the information that you have supplied us with, it is likely that were Court proceedings to be commenced, the claim would be allocated to the Multi-Track which is the normal track for claims with a monetary value of in excess of £100,000.
+[]
+Upon allocation to the Multi-Track, the fixed costs regime will not apply to your/your opponent’s claim and the general rule that the ‘loser pays the winner’s costs’ will apply, subject to any costs budgeting that has been implemented by the Court and the caveats set out above under the heading [italics]Section 74 Solicitors Act 1974 Agreement & Recovery of Costs[end italics].[end mt]
+[]
+[underline]Costs Advice[end]
+[]
+From the information you have provided us with to date, we estimate that our costs for the initial stage of the Work will be £ [qu4_ what is the value of the estimated initial costs xx,xxx?] plus VAT. If any further work is required thereafter, we will discuss the likely associated costs with you beforehand.
+[]
+It is always difficult to give an indication of the likely costs to be incurred in cases of this type. This is because it is impossible to say at this stage when the case may be brought to a conclusion and the amount of work that may be required to reach that point. The vast majority of cases are settled without the need for Court proceedings and of those where Court proceedings are commenced, the majority are settled without a trial. The actual amount of costs to be incurred will depend upon the arguments being advanced and the amount and nature of the evidence involved. The more evidence that is required, the greater the amount of time that will be spent on it by the parties and the Court and, therefore, the greater the costs.
+[]
+The involvement of expert evidence (such as in the form of valuation evidence) will also contribute to an increase in the costs involved.
+[]
+In the event that it may appear that our initial estimate of costs may be exceeded, we will notify you of these changes. We will review our estimate of costs at least every six months.
+[]
+There may be occasions during the conduct of your case where significant disbursements or major amounts of chargeable time are due to be incurred. We reserve the right to seek payment in advance for these commitments, and routinely do so. In the event that we do seek such payment in advance and it is not made by any reasonable deadline set, we reserve the right to cease acting for you in this matter. In the event that we do cease to act we would attempt to mitigate the impact that doing so would have on your case but it is possible that your case may be prejudiced as a result. We also reserve the right to cease acting for you in the event that any bills rendered to you are not paid within the timescale required.
+[]
+To this extent, you agree with us that our retainer in this matter is not to be considered an entire agreement, such that we are not obliged to continue acting for you to the conclusion of the matter and are entitled to terminate your retainer before your case is concluded. We are required to make this clear because there has been legal authority that in the absence of such clarity a firm was required to continue acting in a case where they were no longer being funded to do so.
+[]
+You have a right to ask for your overall cost to be limited to a maximum and we trust you will lialiaise with us if you wish to limit your costs. We will not then exceed this limit without first obtaining your consent. However this does mean that your case may not be concluded if we have reached your cost limit.
+[]
+In Court or some Tribunal proceedings, you may be ordered to pay the costs of someone else, either in relation to the whole of the costs of the case if you are unsuccessful or in relation to some part or issue in the case. Also, you may be ordered to pay the costs of another party during the course of proceedings in relation to a particular application to the Court. In such case you will need to provide this firm with funds to discharge such liability within seven days as failure to do so may prevent your case progressing. Please be aware that once we issue a Court or certain Tribunal claims or counterclaim on your behalf, you are generally unable to discontinue your claim or counterclaim without paying the costs of your opponent unless an agreement on costs is reached.
+[]
+[bold]Limitation of Liability[end]
+[]
+The liability of Ramsdens Solicitors LLP, its partners and employees in any circumstances whatsoever, whether in contract, tort, statute or otherwise and howsoever caused (including our negligence) for loss or damage arising from or in connection with the provision of services to you shall be limited to the sum of £3,000,000.00 (three million pounds) excluding costs and interest.
+[]
+[bold]Bank Accounts and Cybercrime[end]
+[]
+Should we ask you to pay money to us during the course of your matter then please send your funds to our account held with {bank_name} at {bank_address} to:
+[]
+[]
+[ind]Account Name: {account_name}
+[ind]Sort Code: {sort_code}
+[ind]Account Number: {account_number}
+[]
+Should you receive any email correspondence regarding our bank account details please telephone your usual contact at Ramsdens before sending your first payment to verify that the details you have been given are correct. We would never advise our clients of any change in our bank account details by email. Should this happen please treat the email as suspicious and contact us immediately. Please do not send any funds until you have verified that the details are correct.
+[]
+Similarly, if an occasion arises whereby we need to send money to you, we will not accept your bank account details by email without further verification. It is likely that we will telephone you to confirm that the details supplied to us are correct.
+[]
+[bold]Quality Standard[end]
+[]
+Our firm is registered under the Lexcel quality standard of the Law Society. As a result of this we are or may become subject to periodic checks by outside assessors. This could mean that your file is selected for checking, in which case we would need your consent for inspection to occur. All inspections are, of course, conducted in confidence. If you prefer to withhold consent, work on your file will not be affected in any way. Since very few of our clients do object to this we propose to assume that we do have your consent unless you notify us to the contrary. We will also assume, unless you indicate otherwise, that consent on this occasion will extend to all future matters which we conduct on your behalf. Please do not hesitate to contact us if we can explain this further or if you would like us to mark your file as not to be inspected. Alternatively if you would prefer to withhold consent please put a line through this section in the copy letter and return to us.
+[]
+[bold]Data Protection[end]
+[]
+The enclosed Privacy Notice explains how and why we collect, store, use and share your personal data. It also explains your rights in relation to your personal data and how to contact us or supervisory authorities in the event you have a complaint. Please read it carefully. This Privacy Notice is also available on our website, www.ramsdens.co.uk.
+[]
+Our use of your personal data is subject to your instructions, the EU General Data Protection Regulation (GDPR), other relevant UK and EU legislation and our professional duty of confidentiality. Under data protection law, we can only use your personal data if we have a proper reason for doing so. Detailed reasons why we may process your personal data are set out in our Privacy Notice but examples are:
+[]
+[]To comply with our legal and regulatory obligations;
+[a]For the performance of our contract with you or to take steps at your request before entering into a contract; or
+[b]For our legitimate interests or those of a third party, including:
+[bp]Operational reasons, such as recording transactions, training and quality control;
+[bp]Updating and enhancing client records;
+[bp]Analysis to help us manage our practice; and
+[bp]Marketing, such as by sending you updates about subjects and/or events that may be of interest to you.
+[]
+However, this does not apply to processing sensitive personal data about you, as defined. If it is necessary to process this data for the continued provision of our services to you, we will need your explicit consent for doing so and will request this from you as required.
+[]
+[bold]Marketing Communications[end]
+[]
+We would like to use your personal data to send you updates (by email, telephone or post) about legal developments that might be of interest to you and/or information about our services.
+[]
+This will be done pursuant to our Privacy Notice (referred to above), which contains more information about our and your rights in this respect.
+[]
+You have the right to opt out of receiving promotional communications at any time, by:
+[]
+[a]Contacting us by email on {marketing_email};
+[b]Using the ‘unsubscribe’ link in emails; or
+[c]Writing to Marketing Department at: {marketing_address}.
+[]
+Yours sincerely,
+[]
+[]
+[]
+{name}
+Solicitor
+""".strip()
 
 
 if st.button("Generate Client Care Letter"):
     doc = Document()
-    #Set default font for the document (optional, but can help consistency)
+    
+    # Set default font for the document (Arial 11pt)
     style = doc.styles['Normal']
     font = style.font
-    font.name = 'Arial' # Or 'Times New Roman' etc.
-    font.size = Pt(11) # Or your preferred size
+    font.name = 'Arial'
+    font.size = Pt(11)
 
-    # --- P1: Refs and Date ---
-    add_formatted_paragraph(doc, f"Our Ref: {our_ref}")
-    add_formatted_paragraph(doc, f"Your Ref: {your_ref}")
-    add_formatted_paragraph(doc, f"Date: {letter_date.strftime('%d %B %Y')}", space_after_pt=18) # More space after date block
-
-    # --- P2: Salutation ---
-    add_formatted_paragraph(doc, f"Dear {client_name},", space_after_pt=12)
-
-    # --- P3: Thank you ---
-    add_formatted_paragraph(doc, f"Further to our recent discussions, we now write to confirm the terms under which Ramsdens Solicitors LLP (\"Ramsdens\") will act for you. As a firm that is regulated by the Solicitors Regulation Authority, we are required to send you this letter which contains specific and prescribed information.", space_after_pt=12) 
+    # Process the precedent content
+    lines = precedent_content.split('\n')
     
-    # Thank you for your instructions to act on your behalf in relation to {q1_dispute_nature}")
+    # State flags for conditional blocks (indiv/corp, tracks)
+    in_indiv_block = False
+    in_corp_block = False
+    active_track_block = None # Stores 'all_sc', 'sc', etc.
 
-    # --- P4: This letter and Terms ---
-    add_formatted_paragraph(doc, f"We enclose with this letter our Terms and Conditions of Business which must be read in conjunction with this letter. These documents are a formal communication and the language used is reflective of that. We hope that you understand. Please take the time to read these documents carefully. Where there is any conflict between this letter and our Terms and Conditions of Business, the terms of this letter will prevail. Your continuing instructions in this matter will amount to your acceptance of our Terms and Conditions of Business.", space_after_pt=12)
-    
-    # --- P5 & P6: Your instructions ---
-    add_formatted_paragraph(doc, "Your instructions", is_heading=True, heading_level=1, space_after_pt=6) # Using Word's Heading 1 style
-    add_formatted_paragraph(doc, f"We are instructed in relation to {q1_dispute_nature} (\"the Dispute\"). Per our recent discussions, in the first instance we are instructed to {q2_initial_advice} (\"the Work\").
-    
+    for line_raw in lines:
+        line = line_raw.strip()
 
-    # --- P7 & P8: Work we will do ---
-    add_formatted_paragraph(doc, "Work we will do", is_heading=True, heading_level=1, space_after_pt=6)
-    add_formatted_paragraph(doc, f"This matter may develop over time and the nature of disputes is that opposing parties often seek to present facts and matters in a way that is favourable to their own case. We therefore cannot predict every eventuality but we will work with you to advise on any significant developments and review the overall strategy should that be required. Insofar as changes in the future may have a material impact on any cost estimates provided, we will discuss that with you. We will notify you of any material changes by telephone or in correspondence and we will of course always confirm any verbal advice in writing whenever you request that from us.", space_after_pt=12)
-    # --- P9: Timescales ---
-    add_formatted_paragraph(doc, "Timescales", is_heading=True, heading_level=1, space_after_pt=6) # Using Word's Heading 1 style
-    if q3_longer_term_instructions and q3_longer_term_instructions.strip():
-        add_formatted_paragraph(doc, q3_longer_term_instructions)
+        # Handle conditional block start/end tags
+        if line == "[indiv]": in_indiv_block = True; continue
+        if line == "[end indiv]": in_indiv_block = False; continue
+        if line == "[corp]": in_corp_block = True; continue
+        if line == "[end corp]": in_corp_block = False; continue
 
-    # --- P10 & P11: Information on Pricing ---
-    # In precedent, "Information on Pricing" is bold.
-    para_pricing_heading = add_formatted_paragraph(doc, "Information on Pricing", bold=True, is_heading=True, heading_level=1, space_after_pt=6)
-    # para_pricing_heading.runs[0].bold = True # Alternative way to bold specific run if not using heading style
-    add_formatted_paragraph(doc, q4_pricing_info)
+        track_tags = ['[all_sc]', '[all_ft]', '[all_int]', '[all_mt]', '[sc]', '[ft]', '[int]', '[mt]']
+        end_track_tags = ['[end all_sc]', '[end all_ft]', '[end all_int]', '[end all_mt]', '[end sc]', '[end ft]', '[end int]', '[end mt]']
+        
+        is_track_start_tag = False
+        for tag in track_tags:
+            if line == tag:
+                active_track_block = tag
+                is_track_start_tag = True
+                break
+        if is_track_start_tag: continue
 
-    # --- P12, P13, P14: Hourly rates, VAT, Cost updates ---
-    add_formatted_paragraph(doc, "The hourly rates of the fee earners who may be involved in your matter are set out below: [PLACEHOLDER - You may want to add a specific text area for rates or have standard text here e.g., 'as per our separate schedule of rates' / 'Partner: £X, Solicitor: £Y etc.']")
-    add_formatted_paragraph(doc, "We will add VAT to our charges at the rate that applies when the work is done. At present, VAT is 20%.")
-    add_formatted_paragraph(doc, "We will provide you with the best possible information about the likely overall cost of your matter, both at the outset and as your matter progresses. If any unforeseen additional work becomes necessary (for example, due to unexpected difficulties or if your requirements or the circumstances significantly change during the course of the matter), we will inform you of this and provide you with an estimate of the additional costs.")
+        is_track_end_tag = False
+        for tag in end_track_tags:
+            if line == tag:
+                if active_track_block and tag == f"[end {active_track_block[1:-1]}]": # e.g. [end all_sc] matches active_track_block [all_sc]
+                    active_track_block = None
+                is_track_end_tag = True
+                break
+        if is_track_end_tag: continue
 
-    # --- Conditional Track Paragraphs P23/P24 ---
-    track_text_map = {
-        "Small Claims Track": "this typically involves minimal procedural steps, focusing on the claim and defence, and often a short hearing. Disclosure of documents is limited, and witness statements are exchanged. Expert evidence is rare unless permitted by the court.",
-        "Fast Track": "this involves a more structured timetable including standard disclosure, exchange of witness statements, and potentially expert evidence (usually a single joint expert). The trial is typically limited to one day.",
-        "Intermediate Track": "this track is for claims that are too complex for the Fast Track but do not require the full case management of the Multi-Track. It has its own set of directions, disclosure requirements, and potential for more extensive expert evidence and a trial lasting a few days.",
-        "Multi Track": "this involves comprehensive case management by the court, including a costs and case management conference (CCMC), detailed disclosure, exchange of lay and expert witness evidence, and a trial of potentially several days or weeks."
-    }
-    
-    if claim_assigned == "Yes - claim HAS ALREADY been assigned":
-        track_intro = f"As the claim has already been assigned by the Court to the {selected_track}, we anticipate that the following steps will be necessary: "
-    else: # "No - claim IS TO BE assigned"
-        track_intro = f"As the claim is yet to be assigned to a track by the Court, based on the current information, we anticipate it is likely to be allocated to the {selected_track}. The procedural steps will broadly follow those typical for this track: "
-    
-    add_formatted_paragraph(doc, track_intro + track_text_map.get(selected_track, "Details for the selected track will be provided."))
+        # Skip lines based on conditional flags
+        if in_indiv_block and app_inputs['client_type'] != "Individual": continue
+        if in_corp_block and app_inputs['client_type'] != "Corporate": continue
+        
+        # Track condition logic
+        if active_track_block:
+            # Determine if the current active_track_block should be rendered
+            should_render_track = False
+            is_allocated = app_inputs['claim_assigned']
+            track = app_inputs['selected_track']
+
+            if active_track_block == '[all_sc]' and is_allocated and track == "Small Claims Track": should_render_track = True
+            elif active_track_block == '[all_ft]' and is_allocated and track == "Fast Track": should_render_track = True
+            elif active_track_block == '[all_int]' and is_allocated and track == "Intermediate Track": should_render_track = True
+            elif active_track_block == '[all_mt]' and is_allocated and track == "Multi Track": should_render_track = True
+            elif active_track_block == '[sc]' and not is_allocated and track == "Small Claims Track": should_render_track = True
+            elif active_track_block == '[ft]' and not is_allocated and track == "Fast Track": should_render_track = True
+            elif active_track_block == '[int]' and not is_allocated and track == "Intermediate Track": should_render_track = True
+            elif active_track_block == '[mt]' and not is_allocated and track == "Multi Track": should_render_track = True
+            
+            if not should_render_track:
+                continue
+        
+        # --- Paragraph Creation and Formatting ---
+        current_paragraph_style = 'Normal'
+        left_indent_val = None
+        space_after_val = Pt(0) # Default, will be overridden by []
+
+        if line == "[]":
+            if doc.paragraphs: # Set space after for the previous paragraph
+                 doc.paragraphs[-1].paragraph_format.space_after = Pt(12)
+            continue # Don't add an empty paragraph for "[]" itself unless it's for signature lines
+
+        # Placeholder substitutions for header/footer type info
+        line = line.replace("{our_ref}", our_ref)
+        line = line.replace("{your_ref}", your_ref)
+        line = line.replace("{letter_date}", letter_date.strftime('%d %B %Y'))
+        line = line.replace("{client_name_input}", client_name_input)
+        line = line.replace("{client_address_line1}", client_address_line1)
+        line = line.replace("{client_address_line2_conditional}", client_address_line2 if client_address_line2 else "")
+        line = line.replace("{client_postcode}", client_postcode)
+        
+        # Firm details placeholders (already in app_inputs)
+        for key, val in firm_details.items():
+            line = line.replace(f"{{{key}}}", str(val))
 
 
-    # --- P15 & P16: Anticipated Disbursements ---
-    add_formatted_paragraph(doc, "Anticipated Disbursements", is_heading=True, heading_level=1, space_after_pt=6)
-    add_formatted_paragraph(doc, f"The likely disbursements in this matter are {disbursements_info}. We will obtain your approval before incurring any significant disbursements.")
+        if line == "[FEE_TABLE_PLACEHOLDER]":
+            # Insert fee table content, potentially as multiple paragraphs
+            fee_lines = app_inputs['fee_table_content'].split('\n')
+            for fee_line in fee_lines:
+                p = doc.add_paragraph()
+                p.paragraph_format.space_after = Pt(6) # Standard spacing for fee lines
+                add_runs_from_text(p, fee_line, app_inputs)
+            if doc.paragraphs: # Ensure last paragraph of fee table has correct spacing if followed by []
+                 doc.paragraphs[-1].paragraph_format.space_after = Pt(0) 
+            continue
 
-    # --- P17 & P18: Billing Arrangements ---
-    add_formatted_paragraph(doc, "Billing Arrangements", is_heading=True, heading_level=1, space_after_pt=6)
-    add_formatted_paragraph(doc, f"We will send you interim bills on a {billing_frequency} basis. This will help you to budget for costs as well as keeping you informed of the legal expenses being incurred. Payment is due within {payment_due_days} days of your receiving our bill. We reserve the right to charge interest on unpaid bills at a rate of {interest_rate_over_base}% above the Bank of England base rate.")
 
-    # --- P19 & P20: Complaints ---
-    add_formatted_paragraph(doc, "Complaints", is_heading=True, heading_level=1, space_after_pt=6)
-    add_formatted_paragraph(doc, f"We are committed to high quality legal advice and client care. If you are unhappy about any aspect of the service you have received, or about the bill, please contact {complaints_partner_name} on {complaints_partner_phone} or by e-mail to {complaints_partner_email} in the first instance so that we can do our best to resolve the problem for you. We have a procedure in place which details how we handle complaints, which is available on request.")
+        # Handle formatting tags that define paragraph style or prefix
+        if line.startswith("[bp]"):
+            current_paragraph_style = 'ListBullet'
+            line = line.replace("[bp]", "").lstrip()
+            # Add a bit more space after bullet points if not followed by []
+            space_after_val = Pt(6)
+        elif line.startswith("[a]"): line = "(a) " + line.replace("[a]", "").lstrip()
+        elif line.startswith("[b]"): line = "(b) " + line.replace("[b]", "").lstrip()
+        elif line.startswith("[c]"): line = "(c) " + line.replace("[c]", "").lstrip()
+        elif line.startswith("[d]"): line = "(d) " + line.replace("[d]", "").lstrip()
+        elif line.startswith("[e]"): line = "(e) " + line.replace("[e]", "").lstrip()
+        elif line.startswith("[f]"): line = "(f) " + line.replace("[f]", "").lstrip()
+        elif line.startswith("[g]"): line = "(g) " + line.replace("[g]", "").lstrip()
+        elif line.startswith("[ind]"):
+            left_indent_val = Inches(4 / 2.54) # 4cm
+            line = line.replace("[ind]", "").lstrip()
 
-    # --- P21/P22: Ombudsman (conditional on client type) ---
-    if client_type == "Individual Client":
-        add_formatted_paragraph(doc, "If you are an individual, we are entitled to make a complaint to the Legal Ombudsman if you are not satisfied with our handling of your complaint. The Legal Ombudsman can be contacted at PO Box 6806, Wolverhampton, WV1 9WJ, by telephone on 0300 555 0333, or by email at enquiries@legalombudsman.org.uk. Any complaint to the Legal Ombudsman must usually be made within six months of your receiving a final written response from us about your complaint. For further information, you should contact the Legal Ombudsman.")
-    else: # Corporate Client
-        add_formatted_paragraph(doc, "If you are a business client (and not a small enterprise, charity, club, association, or trust that would qualify for the Legal Ombudsman scheme), complaints about our service should be directed to us in the first instance. If we are unable to resolve your complaint, you may have recourse through alternative dispute resolution (ADR) methods, but the Legal Ombudsman scheme is generally not available for larger businesses.")
 
-    # --- P25 & P26: Interest on money held ---
-    add_formatted_paragraph(doc, "Interest on money held for you", is_heading=True, heading_level=1, space_after_pt=6)
-    add_formatted_paragraph(doc, f"Any money we hold on your behalf will be placed in our general client account with {bank_name}. We will account to you for interest earned on such funds where it is fair and reasonable to do so in all the circumstances, in accordanceance with the SRA Accounts Rules. Our policy is not to pay interest if the amount calculated is less than £{interest_threshold}.")
+        # Add the paragraph
+        p = doc.add_paragraph(style=current_paragraph_style if current_paragraph_style != 'Normal' else None)
+        
+        # Apply paragraph-level formatting
+        pf = p.paragraph_format
+        if left_indent_val:
+            pf.left_indent = left_indent_val
+        pf.space_after = space_after_val # This will be overridden if next line is []
 
-    # --- P27 & P28: Storage of papers ---
-    add_formatted_paragraph(doc, "Storage of papers and documents", is_heading=True, heading_level=1, space_after_pt=6)
-    add_formatted_paragraph(doc, f"After completing the work, we are entitled to keep all your papers and documents while there is money owing to us for our charges and expenses. We will keep our file of your papers for up to {file_storage_years} years, except those papers that you ask to be returned to you. We keep files on the understanding that we have the authority to destroy them {file_storage_years} years after the date of the final bill we send you for this matter. We will not destroy documents you ask us to deposit in safe custody.")
+        # Add runs with inline formatting
+        add_runs_from_text(p, line, app_inputs)
+        
+        # Ensure all paragraphs have Arial 11 if not styled otherwise
+        if current_paragraph_style == 'Normal': # Or apply to all if ListBullet doesn't inherit
+            for run in p.runs:
+                if not run.font.name: run.font.name = 'Arial'
+                if not run.font.size: run.font.size = Pt(11)
 
-    # --- P29 & P30: Termination ---
-    add_formatted_paragraph(doc, "Termination", is_heading=True, heading_level=1, space_after_pt=6)
-    add_formatted_paragraph(doc, "You may terminate your instructions to us in writing at any time, but we will be entitled to keep all your papers and documents while there is money owing to us for our charges and expenses. We may decide to stop acting for you only with good reason, for example, if you do not pay an interim bill or comply with our request for a payment on account. We must give you reasonable notice that we will stop acting for you.")
 
-    # --- P31 & P32: Applicable Law ---
-    add_formatted_paragraph(doc, "Applicable Law", is_heading=True, heading_level=1, space_after_pt=6)
-    add_formatted_paragraph(doc, "Our relationship with you is governed by English law and subject to the exclusive jurisdiction of the English courts.")
+    # Final spacing adjustment for the very last paragraph if it wasn't handled by a trailing []
+    if doc.paragraphs:
+        if doc.paragraphs[-1].paragraph_format.space_after == Pt(0): # If it's default 0
+            doc.paragraphs[-1].paragraph_format.space_after = Pt(6) # Give some standard spacing
 
-    # --- P33 & P34: Conclusion ---
-    add_formatted_paragraph(doc, "Conclusion", is_heading=True, heading_level=1, space_after_pt=6)
-    add_formatted_paragraph(doc, "We hope this information is helpful. Please sign and return the enclosed copy of this letter to confirm your agreement to these terms. We look forward to working with you.", space_after_pt=18) # More space before closing
-
-    # --- P35, P36, P37: Closing ---
-    add_formatted_paragraph(doc, "Yours sincerely,", space_after_pt=18) # Space for signature
-    add_formatted_paragraph(doc, f"{firm_name}")
-    add_formatted_paragraph(doc, "Solicitor") # Or specific solicitor name if collected
-
-    # --- Save to buffer and provide download ---
+    # Save to buffer and provide download
     doc_io = io.BytesIO()
     doc.save(doc_io)
     doc_io.seek(0)
@@ -196,7 +514,7 @@ if st.button("Generate Client Care Letter"):
     st.download_button(
         label="Download Word Document",
         data=doc_io,
-        file_name=f"Client_Care_Letter_{client_name.replace(' ', '_')}.docx",
+        file_name=f"Client_Care_Letter_{client_name_input.replace(' ', '_')}.docx",
         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     )
     
