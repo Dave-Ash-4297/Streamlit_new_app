@@ -6,7 +6,7 @@ import io
 from datetime import datetime
 import re
 
-# --- Helper function to process inline formatting and placeholders ---
+# --- Helper function (add_runs_from_text) - unchanged from your previous correct version ---
 def add_runs_from_text(paragraph, text_line, app_inputs):
     # Replace placeholders first
     text_line = text_line.replace("[qu 1 set out the nature of the dispute - start and end lower case]", app_inputs.get('qu1_dispute_nature', ""))
@@ -37,10 +37,9 @@ def add_runs_from_text(paragraph, text_line, app_inputs):
             run.font.name = 'Arial'
             run.font.size = Pt(11)
 
-# Streamlit UI (same as before) ...
+# --- Streamlit UI (condensed for brevity, assumed same as before) ---
 st.set_page_config(layout="wide")
 st.title("Ramsdens Client Care Letter Generator")
-
 firm_details = {
     "name": "Ramsdens Solicitors LLP", "short_name": "Ramsdens",
     "person_responsible_name": "Paul Pinder", "person_responsible_title": "Senior Associate",
@@ -82,6 +81,7 @@ app_inputs = {
 }
 app_inputs.update(firm_details)
 
+# --- Precedent Text (assumed same as before) ---
 precedent_content = """
 Our Ref: {our_ref}
 Your Ref: {your_ref}
@@ -166,7 +166,7 @@ We will not pay out any disbursements on your behalf until the monies have been 
 []
 [underline]Legal Expenses Insurance[end]
 []
-[indiv]It may be that you or a member of your household has the benefit of legal expenses insurance that might cover you for legal costs in connection with this matter. If you wish us to check your eligibility, please let us have a copy of the relevant insurance schedule and policy document. Alternatively you may be entitled to have your liability for costs paid by another person; for example, an employer or Trade Union. Again, please let us know if you wish us to assist you in checking such eligibility. Please note that you will remain responsible for our charges until such time as any legal expenses insurers have agreed to cover you for our legal costs.[end indiv]
+[indiv]It may be that you or a member of your household has the benefit of legal expenses insurance that might cover you for legal costs in connection with this matter. If you wish us tocheck your eligibility, please let us have a copy of the relevant insurance schedule and policy document. Alternatively you may be entitled to have your liability for costs paid by another person; for example, an employer or Trade Union. Again, please let us know if you wish us to assist you in checking such eligibility. Please note that you will remain responsible for our charges until such time as any legal expenses insurers have agreed to cover you for our legal costs.[end indiv]
 [corp]It may be possible to purchase “After the Event” legal expenses insurance cover to cover your opponents, or, possibly, your costs in this matter. If you wish to explore the possibility of such insurance cover, please let us know. Please bear in mind, though, that there will be costs involved in making an application for cover, and it is likely that a large premium (the amount of which will depend on the amount of costs protected and the prospects of success) will be payable at the outset and possibly on any subsequent anniversary of the inception of the policy.[end corp]
 []
 [underline]Your Costs Responsibility to Ramsdens[end]
@@ -320,7 +320,7 @@ if st.button("Generate Client Care Letter"):
     
     in_indiv_block = False
     in_corp_block = False
-    active_track_block = None
+    active_track_block_type = None # Stores the type like '[all_sc]', '[ft]', etc.
     
     track_tags_map = {
         '[all_sc]': ("Yes", "Small Claims Track"), '[all_ft]': ("Yes", "Fast Track"),
@@ -328,154 +328,129 @@ if st.button("Generate Client Care Letter"):
         '[sc]': ("No", "Small Claims Track"), '[ft]': ("No", "Fast Track"),
         '[int]': ("No", "Intermediate Track"), '[mt]': ("No", "Multi Track")
     }
-    end_track_tags_map = {v[0]+v[1]: k for k, v in track_tags_map.items()} # Helper to find start tag from end tag content
 
     for line_raw in lines:
-        line = line_raw.strip()
-        content_to_process = line 
-        
-        # --- 1. Handle PURE control lines (tags that are alone on a line) ---
-        if line == "[indiv]": in_indiv_block = True; continue
-        if line == "[end indiv]": in_indiv_block = False; continue
-        if line == "[corp]": in_corp_block = True; continue
-        if line == "[end corp]": in_corp_block = False; continue
-        
-        is_pure_track_control_tag = False
-        for tag_start, (assigned_status, track_name) in track_tags_map.items():
-            if line == tag_start:
-                active_track_block = tag_start
-                is_pure_track_control_tag = True; break
-            end_tag_candidate = f"[end {tag_start[1:-1]}]" # e.g. [end all_sc]
-            if line == end_tag_candidate and active_track_block == tag_start:
-                active_track_block = None
-                is_pure_track_control_tag = True; break
-        if is_pure_track_control_tag: continue
+        current_line_content = line_raw.strip()
+        original_line_for_spacing_check = line_raw.strip() # Keep a copy for "[]" check
 
-        # --- 2. Process lines that might have content AND tags ---
-        # Strip tags and update block states for the current line's content
-        current_line_started_indiv = False
-        current_line_ended_indiv = False
-        current_line_started_corp = False
-        current_line_ended_corp = False
-        # Track tags on same line as content (simplified: assume tracks are pure or multi-line for now)
-
-        if content_to_process.startswith("[indiv]"):
-            current_line_started_indiv = True
-            content_to_process = content_to_process.removeprefix("[indiv]")
-        if content_to_process.endswith("[end indiv]"): # Check after prefix removal
-            current_line_ended_indiv = True
-            content_to_process = content_to_process.removesuffix("[end indiv]")
+        # --- 1. Handle State Changes and Tag Stripping ---
+        # These flags determine if the *current line's stripped content* should be processed
+        # under a newly activated block condition.
         
-        if content_to_process.startswith("[corp]"): # Use separate if, not elif
-            current_line_started_corp = True
-            content_to_process = content_to_process.removeprefix("[corp]")
-        if content_to_process.endswith("[end corp]"): # Check after prefix removal
-            current_line_ended_corp = True
-            content_to_process = content_to_process.removesuffix("[end corp]")
+        processed_current_line_content = current_line_content
 
-        # Update global state based on tags found on *this* line (if any)
-        if current_line_started_indiv: in_indiv_block = True
-        if current_line_started_corp: in_corp_block = True
-            
-        # --- 3. Determine if this line's content should be rendered ---
-        render_this_line = False
-        # Priority: client type blocks
-        if in_indiv_block: # If we are in an indiv block (either started this line or previously)
-            if app_inputs['client_type'] == "Individual":
-                render_this_line = True
-        elif in_corp_block: # If we are in a corp block
-            if app_inputs['client_type'] == "Corporate":
-                render_this_line = True
-        else: # Not in any client-type specific block
-            render_this_line = True
-            
-        # Secondary filter: track type, if applicable
-        if render_this_line and active_track_block:
-            should_render_due_to_track = False
-            target_assignment, target_track = track_tags_map[active_track_block]
-            
+        # Client type blocks
+        if processed_current_line_content == "[indiv]": in_indiv_block = True; continue
+        if processed_current_line_content == "[end indiv]": in_indiv_block = False; continue
+        if processed_current_line_content == "[corp]": in_corp_block = True; continue
+        if processed_current_line_content == "[end corp]": in_corp_block = False; continue
+        
+        if processed_current_line_content.startswith("[indiv]"):
+            in_indiv_block = True
+            processed_current_line_content = processed_current_line_content.removeprefix("[indiv]")
+        if processed_current_line_content.endswith("[end indiv]"):
+            # Content before [end indiv] is part of the block
+            processed_current_line_content = processed_current_line_content.removesuffix("[end indiv]")
+            # State will be turned off *after* processing this line's content
+        
+        if processed_current_line_content.startswith("[corp]"):
+            in_corp_block = True
+            processed_current_line_content = processed_current_line_content.removeprefix("[corp]")
+        if processed_current_line_content.endswith("[end corp]"):
+            processed_current_line_content = processed_current_line_content.removesuffix("[end corp]")
+
+        # Track blocks
+        # Check if this line STARTS a new track block
+        if not active_track_block_type: # Only look for a new start if not already in one
+            for tag_key, (assign_status, track_name) in track_tags_map.items():
+                if processed_current_line_content.startswith(tag_key):
+                    active_track_block_type = tag_key
+                    processed_current_line_content = processed_current_line_content.removeprefix(tag_key)
+                    break 
+        
+        # Check if this line ENDS the current active track block
+        ended_track_on_this_line = False
+        if active_track_block_type:
+            end_tag_for_current_block = f"[end {active_track_block_type[1:-1]}]" # e.g. [end all_sc]
+            if processed_current_line_content.endswith(end_tag_for_current_block):
+                processed_current_line_content = processed_current_line_content.removesuffix(end_tag_for_current_block)
+                ended_track_on_this_line = True # Mark that it ended, state cleared after processing
+
+        # --- 2. Determine if current processed_current_line_content should be rendered ---
+        should_render = True
+
+        # Filter by client type
+        if in_indiv_block and app_inputs['client_type'] != "Individual": should_render = False
+        elif in_corp_block and app_inputs['client_type'] != "Corporate": should_render = False
+        
+        # Filter by track type (if a track block is active for this content)
+        if should_render and active_track_block_type:
+            target_assignment_status_str, target_track_name_str = track_tags_map[active_track_block_type]
             current_assignment_str = "Yes" if app_inputs['claim_assigned'] else "No"
             current_track_str = app_inputs['selected_track']
 
-            if current_assignment_str == target_assignment and current_track_str == target_track:
-                should_render_due_to_track = True
+            if not (current_assignment_str == target_assignment_status_str and current_track_str == target_track_name_str):
+                should_render = False
+        
+        # --- 3. Render content if all conditions met ---
+        final_content_to_print = processed_current_line_content.strip()
+
+        if original_line_for_spacing_check == "[]":
+            if doc.paragraphs and should_render: # only add spacing if the current context is valid
+                 doc.paragraphs[-1].paragraph_format.space_after = Pt(12)
+            # Reset states if an end tag was on the same line as [] (unlikely but for safety)
+            if current_line_content.endswith("[end indiv]"): in_indiv_block = False
+            if current_line_content.endswith("[end corp]"): in_corp_block = False
+            if ended_track_on_this_line: active_track_block_type = None
+            continue
+
+        if should_render and final_content_to_print:
+            # Substitute placeholders
+            current_content_substituted = final_content_to_print
+            current_content_substituted = current_content_substituted.replace("{our_ref}", our_ref)
+            current_content_substituted = current_content_substituted.replace("{your_ref}", your_ref)
+            current_content_substituted = current_content_substituted.replace("{letter_date}", letter_date.strftime('%d %B %Y'))
+            current_content_substituted = current_content_substituted.replace("{client_name_input}", client_name_input)
+            current_content_substituted = current_content_substituted.replace("{client_address_line1}", client_address_line1)
+            current_content_substituted = current_content_substituted.replace("{client_address_line2_conditional}", client_address_line2 if client_address_line2 else "")
+            current_content_substituted = current_content_substituted.replace("{client_postcode}", client_postcode)
+            for key, val in firm_details.items():
+                current_content_substituted = current_content_substituted.replace(f"{{{key}}}", str(val))
+
+            if current_content_substituted == "[FEE_TABLE_PLACEHOLDER]":
+                fee_lines = app_inputs['fee_table_content'].split('\n')
+                for fee_line in fee_lines:
+                    p_fee = doc.add_paragraph(); p_fee.paragraph_format.space_after = Pt(6)
+                    add_runs_from_text(p_fee, fee_line, app_inputs)
+                if doc.paragraphs: doc.paragraphs[-1].paragraph_format.space_after = Pt(0)
             
-            if not should_render_due_to_track:
-                render_this_line = False # Override if track doesn't match
-
-        # --- 4. Render content if all conditions met ---
-        if render_this_line:
-            final_content_for_run = content_to_process.strip() # Strip whitespace from content part
-            
-            # Handle paragraph spacing marker "[]"
-            if line_raw.strip() == "[]": # Use line_raw to ensure it was originally just "[]"
-                if doc.paragraphs:
-                    doc.paragraphs[-1].paragraph_format.space_after = Pt(12)
-                continue # Handled spacing, next line
-
-            if not final_content_for_run and not line_raw.strip() == "": # Skip if content is empty after tag stripping, unless it was an empty line intended for spacing (like signature)
-                 pass # Effectively skip if only tags were on the line and stripped, or if it was an empty line not "[]"
-
-            else: # Process and add paragraph
-                # Substitute placeholders
-                current_content_substituted = final_content_for_run # Start with stripped content
-                current_content_substituted = current_content_substituted.replace("{our_ref}", our_ref)
-                current_content_substituted = current_content_substituted.replace("{your_ref}", your_ref)
-                current_content_substituted = current_content_substituted.replace("{letter_date}", letter_date.strftime('%d %B %Y'))
-                current_content_substituted = current_content_substituted.replace("{client_name_input}", client_name_input)
-                current_content_substituted = current_content_substituted.replace("{client_address_line1}", client_address_line1)
-                current_content_substituted = current_content_substituted.replace("{client_address_line2_conditional}", client_address_line2 if client_address_line2 else "")
-                current_content_substituted = current_content_substituted.replace("{client_postcode}", client_postcode)
-                for key, val in firm_details.items():
-                    current_content_substituted = current_content_substituted.replace(f"{{{key}}}", str(val))
-
-                if current_content_substituted == "[FEE_TABLE_PLACEHOLDER]":
-                    fee_lines = app_inputs['fee_table_content'].split('\n')
-                    for fee_line in fee_lines:
-                        p_fee = doc.add_paragraph()
-                        p_fee.paragraph_format.space_after = Pt(6)
-                        add_runs_from_text(p_fee, fee_line, app_inputs)
-                    if doc.paragraphs: doc.paragraphs[-1].paragraph_format.space_after = Pt(0)
-                    continue
-
-                # --- Actual Paragraph Creation ---
-                para_style = 'Normal'
-                para_prefix = ""
-                para_left_indent = None
-                para_space_after = Pt(0) # Default, overridden by next line being []
-
+            else: # Actual Paragraph Creation
+                para_style = 'Normal'; para_prefix = ""; para_left_indent = None; para_space_after = Pt(0)
                 if current_content_substituted.startswith("[bp]"):
-                    para_style = 'ListBullet'
-                    current_content_substituted = current_content_substituted.replace("[bp]", "").lstrip()
-                    para_space_after = Pt(6)
-                # Handling for [a], [b] etc.
+                    para_style = 'ListBullet'; current_content_substituted = current_content_substituted.replace("[bp]", "").lstrip(); para_space_after = Pt(6)
                 match_ab = re.match(r'\[([a-g])\](.*)', current_content_substituted)
-                if match_ab:
-                    para_prefix = f"({match_ab.group(1)}) "
-                    current_content_substituted = match_ab.group(2).lstrip()
+                if match_ab: para_prefix = f"({match_ab.group(1)}) "; current_content_substituted = match_ab.group(2).lstrip()
                 elif current_content_substituted.startswith("[ind]"):
-                    para_left_indent = Inches(4 / 2.54)
-                    current_content_substituted = current_content_substituted.replace("[ind]", "").lstrip()
-
+                    para_left_indent = Inches(4 / 2.54); current_content_substituted = current_content_substituted.replace("[ind]", "").lstrip()
+                
                 p = doc.add_paragraph(style=para_style if para_style != 'Normal' else None)
                 pf = p.paragraph_format
                 if para_left_indent: pf.left_indent = para_left_indent
                 pf.space_after = para_space_after
-                
-                # Add prefix before other runs if present
                 if para_prefix:
-                    run_prefix = p.add_run(para_prefix)
-                    run_prefix.font.name = 'Arial'
-                    run_prefix.font.size = Pt(11)
-
+                    run_prefix = p.add_run(para_prefix); run_prefix.font.name = 'Arial'; run_prefix.font.size = Pt(11)
                 add_runs_from_text(p, current_content_substituted, app_inputs)
 
+        elif should_render and original_line_for_spacing_check == "": # Handle intentional empty lines for spacing
+            doc.add_paragraph()
 
-        # --- 5. Update global state if block ended on this line ---
-        if current_line_ended_indiv: in_indiv_block = False
-        if current_line_ended_corp: in_corp_block = False
+        # --- 4. Update block states *after* processing the line's content for any END tags ---
+        # This is for tags that were on the same line as content and ended the block.
+        if current_line_content.endswith("[end indiv]"): in_indiv_block = False 
+        if current_line_content.endswith("[end corp]"): in_corp_block = False
+        if ended_track_on_this_line: active_track_block_type = None
+        
 
-    # Final spacing for the very last paragraph
     if doc.paragraphs and doc.paragraphs[-1].paragraph_format.space_after == Pt(0):
         doc.paragraphs[-1].paragraph_format.space_after = Pt(6)
 
