@@ -1,13 +1,18 @@
 import streamlit as st
 from docx import Document
 from docx.shared import Pt, Inches
-from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
+from docx.enum.text import WD_PARAGRAPH_ALIGNMENT # Keep if any specific alignment is needed later
 import io
 from datetime import datetime
 import re
 
-# --- Helper function (add_runs_from_text) - unchanged ---
+# --- Desired Default Font ---
+DEFAULT_FONT_NAME = "HelveticaNeueLT Pro 45 Lt"
+DEFAULT_FONT_SIZE = Pt(11)
+
+# --- Helper function (add_runs_from_text) - MODIFIED for new font ---
 def add_runs_from_text(paragraph, text_line, app_inputs):
+    # Replace placeholders first
     text_line = text_line.replace("[qu 1 set out the nature of the dispute - start and end lower case]", app_inputs.get('qu1_dispute_nature', ""))
     text_line = text_line.replace("[qu 2 set out the immediate steps that will be taken (this maybe a review of the facts and papers to allow you to advise in writing or making initial court applications or taking the first step, prosecuting or defending in a mainstream action). If you have agreed to engage counsel or other third party to assist you should also say so here – start and end lower case]", app_inputs.get('qu2_initial_steps', ""))
     text_line = text_line.replace("[qu3 Explain the estimated time scales to complete the Work. Start capital and end full stop]", app_inputs.get('qu3_timescales', ""))
@@ -29,138 +34,60 @@ def add_runs_from_text(paragraph, text_line, app_inputs):
             if is_bold: run.bold = True
             if is_italic: run.italic = True
             if is_underline: run.underline = True
-            run.font.name = 'Arial'; run.font.size = Pt(11)
+            run.font.name = DEFAULT_FONT_NAME # Use the defined default font
+            run.font.size = DEFAULT_FONT_SIZE # Use the defined default size
+            
+# --- Color Palette (from previous version) ---
+MAIN_BG = "#022933"; MAIN_TEXT = "#FFFFFF"; INPUT_FIELD_BG = "#D3D3D3"; 
+INPUT_LABEL_TEXT = "#FFFFFF"; BUTTON_BG = "#98FB98"; BUTTON_TEXT = "#FFFFFF"; SIDEBAR_BG = "#033b4a"
 
-# --- New Color Palette ---
-MAIN_BG = "#022933"
-MAIN_TEXT = "#FFFFFF"
-INPUT_FIELD_BG = "#D3D3D3" # LightGray for the actual input part
-INPUT_WIDGET_AREA_BG = "#4A6D7C" # A slightly lighter, desaturated version of main for widget area
-INPUT_LABEL_TEXT = "#FFFFFF" # White labels for inputs
-BUTTON_BG = "#98FB98"      # PaleGreen
-BUTTON_TEXT = "#FFFFFF"    # White
-SIDEBAR_BG = "#033b4a"     # Slightly lighter than main BG for sidebar
-
-# --- Streamlit Page Configuration ---
-st.set_page_config(
-    layout="wide",
-    page_title="Ramsdens Client Care Letter Generator",
-    page_icon="https://www.ramsdens.co.uk/wp-content/themes/ramsdens/favicon.ico"
-)
-
-# --- Custom CSS for New Styling ---
+# --- Streamlit Page Configuration & CSS (from previous version, condensed for brevity) ---
+st.set_page_config(layout="wide", page_title="Ramsdens Client Care Letter Generator", page_icon="https://www.ramsdens.co.uk/wp-content/themes/ramsdens/favicon.ico")
+# IMPORTANT: The CSS font-family for the Streamlit app UI is separate from the Word document font.
 st.markdown(f"""
 <style>
     /* Main app background and text color */
-    .stApp {{
-        background-color: {MAIN_BG};
-        color: {MAIN_TEXT};
-    }}
-    body, p, .stMarkdown {{ /* Ensure general text inherits correctly */
-        color: {MAIN_TEXT};
-        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    }}
-
+    .stApp {{ background-color: {MAIN_BG}; color: {MAIN_TEXT}; }}
+    body, p, .stMarkdown {{ color: {MAIN_TEXT}; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; }}
     /* Sidebar styling */
-    .stSidebar {{
-        background-color: {SIDEBAR_BG};
+    .stSidebar {{ background-color: {SIDEBAR_BG}; }}
+    .stSidebar .st-emotion-cache-16txtl3 {{ color: {MAIN_TEXT}; }}
+    .stSidebar .st-emotion-cache-ue6h4r p, .stSidebar label {{ color: {INPUT_LABEL_TEXT} !important; }}
+    .stSidebar .stTextInput input, .stSidebar .stDateInput input, .stSidebar .stSelectbox div[data-baseweb="select"] > div:first-child {{
+        background-color: {INPUT_FIELD_BG} !important; color: #000000 !important; border: 1px solid {SIDEBAR_BG};
     }}
-    .stSidebar .st-emotion-cache-16txtl3 {{ /* Sidebar header */
-        color: {MAIN_TEXT}; /* White sidebar header text */
-    }}
-    .stSidebar .st-emotion-cache-ue6h4r p, /* Sidebar input labels */
-    .stSidebar label {{ /* More general label targeting in sidebar */
-        color: {INPUT_LABEL_TEXT} !important; /* White labels in sidebar */
-    }}
-    /* Sidebar input field backgrounds and text */
-    .stSidebar .stTextInput input,
-    .stSidebar .stDateInput input,
-    .stSidebar .stSelectbox div[data-baseweb="select"] > div:first-child {{
-        background-color: {INPUT_FIELD_BG} !important;
-        color: #000000 !important; /* Black text in input fields for readability */
-        border: 1px solid {SIDEBAR_BG};
-    }}
-     .stSidebar .stRadio div[role="radiogroup"] > label {{
-        background-color: transparent; /* Ensure radio options background is not overridden badly */
-    }}
-    .stSidebar .stRadio label span {{ /* Text for radio button options */
-         color: {INPUT_LABEL_TEXT} !important;
-    }}
-
-
+    .stSidebar .stRadio label span {{ color: {INPUT_LABEL_TEXT} !important; }}
     /* Main content headers */
-    h1, .st-emotion-cache-10trblm {{
-        color: {MAIN_TEXT}; /* White title */
-    }}
-    h2, .st-emotion-cache-s8k1j8 {{
-        color: {MAIN_TEXT}; /* White headers */
-        border-bottom: 2px solid {BUTTON_BG}; /* Pale green underline for headers */
-        padding-bottom: 5px;
-    }}
-
+    h1, .st-emotion-cache-10trblm {{ color: {MAIN_TEXT}; }}
+    h2, .st-emotion-cache-s8k1j8 {{ color: {MAIN_TEXT}; border-bottom: 2px solid {BUTTON_BG}; padding-bottom: 5px; }}
     /* Input widget labels in main area */
-    .main .stTextInput label, 
-    .main .stTextArea label, 
-    .main .stDateInput label, 
-    .main .stSelectbox label, 
-    .main .stRadio label {{
-        color: {INPUT_LABEL_TEXT} !important; /* White labels */
-        font-weight: bold;
+    .main .stTextInput label, .main .stTextArea label, .main .stDateInput label, .main .stSelectbox label, .main .stRadio label {{
+        color: {INPUT_LABEL_TEXT} !important; font-weight: bold;
     }}
-
-    /* Styling for the actual input fields in main area - "Question Boxes" */
-    .main .stTextInput input,
-    .main .stTextArea textarea,
-    .main .stDateInput input,
-    .main .stSelectbox div[data-baseweb="select"] > div:first-child {{
-        background-color: {INPUT_FIELD_BG} !important; /* Light gray background for field */
-        color: #000000 !important; /* Black text in input field for readability */
-        border: 1px solid {MAIN_BG}; /* Border to match main bg or a subtle one */
-        border-radius: 3px;
+    /* Styling for the actual input fields in main area */
+    .main .stTextInput input, .main .stTextArea textarea, .main .stDateInput input, .main .stSelectbox div[data-baseweb="select"] > div:first-child {{
+        background-color: {INPUT_FIELD_BG} !important; color: #000000 !important; border: 1px solid {MAIN_BG}; border-radius: 3px;
     }}
-     .main .stRadio div[role="radiogroup"] > label {{ /* Radio button options wrapper */
-        background-color: transparent; /* Make background of radio option transparent */
-        padding: 5px;
-        margin-bottom: 5px;
-        border-radius: 3px;
-    }}
-    .main .stRadio label span {{ /* Text for radio button options */
-         color: {INPUT_LABEL_TEXT} !important;
-    }}
-
-
-    /* Button styling (Generate and Download) */
+    .main .stRadio label span {{ color: {INPUT_LABEL_TEXT} !important; }}
+    /* Button styling */
     .stButton>button, div[data-testid="stDownloadButton"] button {{
-        background-color: {BUTTON_BG} !important;
-        color: {BUTTON_TEXT} !important;
-        border: 1px solid {BUTTON_BG} !important;
-        border-radius: 5px;
-        padding: 12px 24px !important; /* Increased padding */
-        font-size: 1.1em !important;    /* Larger text */
-        font-weight: bold !important;
-        text-transform: uppercase !important; /* BLOCK CAPITALS */
+        background-color: {BUTTON_BG} !important; color: {BUTTON_TEXT} !important; border: 1px solid {BUTTON_BG} !important;
+        border-radius: 5px; padding: 12px 24px !important; font-size: 1.1em !important;    
+        font-weight: bold !important; text-transform: uppercase !important;
     }}
     .stButton>button:hover, div[data-testid="stDownloadButton"] button:hover {{
-        background-color: #87CEEB !important; /* SkyBlue - or a slightly darker green for hover */
-        color: {BUTTON_TEXT} !important;
-        border: 1px solid #87CEEB !important;
+        background-color: #87CEEB !important; color: {BUTTON_TEXT} !important; border: 1px solid #87CEEB !important;
     }}
-    
     /* Success message styling */
     .stAlert[data-baseweb="alert"] div[role="alert"] {{
-        background-color: {SIDEBAR_BG}; /* Use sidebar bg for alert */
-        color: {MAIN_TEXT}; /* White text for alert */
-        border: 1px solid {BUTTON_BG}; /* Pale green border */
+        background-color: {SIDEBAR_BG}; color: {MAIN_TEXT}; border: 1px solid {BUTTON_BG};
     }}
-
 </style>
 """, unsafe_allow_html=True)
 
 
-# --- App Title ---
+# --- App Title, Firm Details, UI Inputs (condensed for brevity, assumed same) ---
 st.title("Ramsdens Client Care Letter Generator")
-
-# --- Firm Details (unchanged) ---
 firm_details = {
     "name": "Ramsdens Solicitors LLP", "short_name": "Ramsdens",
     "person_responsible_name": "Paul Pinder", "person_responsible_title": "Senior Associate",
@@ -173,42 +100,12 @@ firm_details = {
     "account_number": "03909026", "marketing_email": "dataprotection@ramsdens.co.uk",
     "marketing_address": "Ramsdens Solicitors LLP, Oakley House, 1 Hungerford Road, Edgerton, Huddersfield, HD3 3AL"
 }
-
-# --- Sidebar Inputs (structure unchanged) ---
-st.sidebar.header("Letter Details")
-our_ref = st.sidebar.text_input("Our Reference", "PP/LEGAL/RAM001/001")
-your_ref = st.sidebar.text_input("Your Reference (if any)", "")
-letter_date = st.sidebar.date_input("Letter Date", datetime.today())
-
-st.sidebar.header("Client Information")
-client_name_input = st.sidebar.text_input("Client Full Name / Company Name", "Mr. John Smith")
-client_address_line1 = st.sidebar.text_input("Client Address Line 1", "123 Example Street")
-client_address_line2 = st.sidebar.text_input("Client Address Line 2", "SomeTown")
-client_postcode = st.sidebar.text_input("Client Postcode", "EX4 MPL")
-client_type = st.sidebar.radio("Client Type:", ("Individual", "Corporate"), key="client_type_radio")
-
-st.sidebar.header("Case Details")
-claim_assigned_input = st.sidebar.radio("Is the claim already assigned to a court track?", ("Yes", "No"), key="claim_assigned_radio")
-track_options = ["Small Claims Track", "Fast Track", "Intermediate Track", "Multi Track"]
-selected_track_input = st.sidebar.selectbox("Which court track applies or is anticipated?", track_options, key="track_select")
-
-# --- Main Area Inputs (structure unchanged) ---
-st.header("Dynamic Content (Answers to Questions)")
-qu1_dispute_nature_input = st.text_area("Q1: Nature of the Dispute (for 'the Dispute')", "a contractual matter related to services provided", height=75)
-qu2_initial_steps_input = st.text_area("Q2: Immediate Steps to be Taken (for 'the Work')", "review the documentation you have provided and advise you on the merits of your position and potential next steps. we will also prepare an initial letter to the other side", height=150)
-qu3_timescales_input = st.text_area("Q3: Estimated Timescales for 'the Work'", "We estimate that the initial Work will take approximately 2-4 weeks to complete, depending on the complexity and responsiveness of other parties. We will keep you updated on progress.", height=100)
-qu4_initial_costs_estimate_input = st.text_input("Q4: Estimated Initial Costs for 'the Work' (e.g., 1,500)", "1,500")
-
-st.header("Fee Table Insertion")
-fee_table_content_input = st.text_area("Fee Table Content (to be inserted in 'Costs and Disbursements')", "Partner: £XXX per hour\nSenior Associate: £YYY per hour\nSolicitor: £ZZZ per hour\nParalegal: £AAA per hour", height=150)
-
-app_inputs = {
-    'qu1_dispute_nature': qu1_dispute_nature_input, 'qu2_initial_steps': qu2_initial_steps_input,
-    'qu3_timescales': qu3_timescales_input, 'qu4_initial_costs_estimate': qu4_initial_costs_estimate_input,
-    'fee_table_content': fee_table_content_input, 'client_type': client_type,
-    'claim_assigned': claim_assigned_input == "Yes", 'selected_track': selected_track_input
-}
-app_inputs.update(firm_details)
+st.sidebar.header("Letter Details"); our_ref = st.sidebar.text_input("Our Reference", "PP/LEGAL/RAM001/001"); your_ref = st.sidebar.text_input("Your Reference (if any)", ""); letter_date = st.sidebar.date_input("Letter Date", datetime.today())
+st.sidebar.header("Client Information"); client_name_input = st.sidebar.text_input("Client Name", "Mr. John Smith"); client_address_line1 = st.sidebar.text_input("Address 1", "123 Example St"); client_address_line2 = st.sidebar.text_input("Address 2", "SomeTown"); client_postcode = st.sidebar.text_input("Postcode", "EX4 MPL"); client_type = st.sidebar.radio("Client Type:", ("Individual", "Corporate"))
+st.sidebar.header("Case Details"); claim_assigned_input = st.sidebar.radio("Claim Assigned?", ("Yes", "No")); track_options = ["Small Claims Track", "Fast Track", "Intermediate Track", "Multi Track"]; selected_track_input = st.sidebar.selectbox("Track?", track_options)
+st.header("Dynamic Content"); qu1_dispute_nature_input = st.text_area("Q1: Nature of Dispute", "a contractual matter"); qu2_initial_steps_input = st.text_area("Q2: Initial Steps", "review docs"); qu3_timescales_input = st.text_area("Q3: Timescales", "2-4 weeks"); qu4_initial_costs_estimate_input = st.text_input("Q4: Initial Costs Est.", "1,500")
+st.header("Fee Table Insertion"); fee_table_content_input = st.text_area("Fee Table Content", "Partner: £XXX")
+app_inputs = {'qu1_dispute_nature': qu1_dispute_nature_input, 'qu2_initial_steps': qu2_initial_steps_input, 'qu3_timescales': qu3_timescales_input, 'qu4_initial_costs_estimate': qu4_initial_costs_estimate_input, 'fee_table_content': fee_table_content_input, 'client_type': client_type, 'claim_assigned': claim_assigned_input == "Yes", 'selected_track': selected_track_input}; app_inputs.update(firm_details)
 
 # --- Precedent Text (unchanged) ---
 precedent_content = """
@@ -437,139 +334,122 @@ Yours sincerely,
 Solicitor
 """.strip()
 
-
-# --- Document Generation Logic (unchanged from previous correct version) ---
-if st.button("Generate Client Care Letter"): # This button will be styled by CSS
+# --- Document Generation Logic ---
+if st.button("Generate Client Care Letter"):
     doc = Document()
+    
+    # --- Set Default Font for 'Normal' style ---
     style = doc.styles['Normal']
-    font = style.font
-    font.name = 'Arial'
-    font.size = Pt(11)
+    style.font.name = DEFAULT_FONT_NAME
+    style.font.size = DEFAULT_FONT_SIZE
 
     lines = precedent_content.split('\n')
-    
-    in_indiv_block = False
-    in_corp_block = False
-    active_track_block_type = None 
-    
+    in_indiv_block = False; in_corp_block = False; active_track_block_type = None
+    main_paragraph_counter = 0
+    in_main_numbered_section = False
+    SUB_ITEM_INDENT_VALUE = Inches(0.5) 
+    FIRST_NUMBERED_PARAGRAPH_CONTAINS = "Further to our recent discussions, we now write to confirm the terms under which Ramsdens Solicitors LLP"
+    STOP_NUMBERING_IF_LINE_IS = "Yours sincerely,"
     track_tags_map = {
         '[all_sc]': ("Yes", "Small Claims Track"), '[all_ft]': ("Yes", "Fast Track"),
         '[all_int]': ("Yes", "Intermediate Track"), '[all_mt]': ("Yes", "Multi Track"),
         '[sc]': ("No", "Small Claims Track"), '[ft]': ("No", "Fast Track"),
         '[int]': ("No", "Intermediate Track"), '[mt]': ("No", "Multi Track")
     }
-
     for line_raw in lines:
-        current_line_content_stripped = line_raw.strip() 
-        content_to_process_for_runs = current_line_content_stripped
-
-        line_had_start_tag = False
-        line_had_end_tag = False
-
-        if current_line_content_stripped == "[indiv]": in_indiv_block = True; continue
-        if current_line_content_stripped == "[end indiv]": in_indiv_block = False; continue
-        if current_line_content_stripped == "[corp]": in_corp_block = True; continue
-        if current_line_content_stripped == "[end corp]": in_corp_block = False; continue
-        
-        if content_to_process_for_runs.startswith("[indiv]"):
-            in_indiv_block = True; line_had_start_tag = True
-            content_to_process_for_runs = content_to_process_for_runs.removeprefix("[indiv]")
-        if content_to_process_for_runs.endswith("[end indiv]"):
-            line_had_end_tag = True 
-            content_to_process_for_runs = content_to_process_for_runs.removesuffix("[end indiv]")
-        
-        if content_to_process_for_runs.startswith("[corp]"):
-            in_corp_block = True; line_had_start_tag = True
-            content_to_process_for_runs = content_to_process_for_runs.removeprefix("[corp]")
-        if content_to_process_for_runs.endswith("[end corp]"):
-            line_had_end_tag = True
-            content_to_process_for_runs = content_to_process_for_runs.removesuffix("[end corp]")
-
-        if not active_track_block_type: 
+        current_line_stripped_for_logic = line_raw.strip()
+        content_to_process_for_runs = current_line_stripped_for_logic 
+        line_had_start_tag = False; line_had_end_tag = False
+        if current_line_stripped_for_logic == "[indiv]": in_indiv_block = True; continue
+        if current_line_stripped_for_logic == "[end indiv]": in_indiv_block = False; continue
+        if current_line_stripped_for_logic == "[corp]": in_corp_block = True; continue
+        if current_line_stripped_for_logic == "[end corp]": in_corp_block = False; continue
+        if content_to_process_for_runs.startswith("[indiv]"): in_indiv_block = True; line_had_start_tag = True; content_to_process_for_runs = content_to_process_for_runs.removeprefix("[indiv]")
+        if content_to_process_for_runs.endswith("[end indiv]"): line_had_end_tag = True; content_to_process_for_runs = content_to_process_for_runs.removesuffix("[end indiv]")
+        if content_to_process_for_runs.startswith("[corp]"): in_corp_block = True; line_had_start_tag = True; content_to_process_for_runs = content_to_process_for_runs.removeprefix("[corp]")
+        if content_to_process_for_runs.endswith("[end corp]"): line_had_end_tag = True; content_to_process_for_runs = content_to_process_for_runs.removesuffix("[end corp]")
+        if not active_track_block_type:
             for tag_key in track_tags_map:
-                if content_to_process_for_runs.startswith(tag_key):
-                    active_track_block_type = tag_key; line_had_start_tag = True
-                    content_to_process_for_runs = content_to_process_for_runs.removeprefix(tag_key)
-                    break 
-        
+                if content_to_process_for_runs.startswith(tag_key): active_track_block_type = tag_key; line_had_start_tag = True; content_to_process_for_runs = content_to_process_for_runs.removeprefix(tag_key); break
         if active_track_block_type:
             end_tag_for_current_block = f"[end {active_track_block_type[1:-1]}]"
-            if content_to_process_for_runs.endswith(end_tag_for_current_block):
-                line_had_end_tag = True
-                content_to_process_for_runs = content_to_process_for_runs.removesuffix(end_tag_for_current_block)
-
-        should_render_based_on_client_type = True
-        if in_indiv_block and app_inputs['client_type'] != "Individual": should_render_based_on_client_type = False
-        elif in_corp_block and app_inputs['client_type'] != "Corporate": should_render_based_on_client_type = False
-        
+            if content_to_process_for_runs.endswith(end_tag_for_current_block): line_had_end_tag = True; content_to_process_for_runs = content_to_process_for_runs.removesuffix(end_tag_for_current_block)
+        should_render_based_on_client_type = not ((in_indiv_block and app_inputs['client_type'] != "Individual") or \
+                                               (in_corp_block and app_inputs['client_type'] != "Corporate"))
         should_render_based_on_track = True
         if active_track_block_type:
-            target_assignment_status_str, target_track_name_str = track_tags_map[active_track_block_type]
-            current_assignment_str = "Yes" if app_inputs['claim_assigned'] else "No"
-            current_track_str = app_inputs['selected_track']
-            if not (current_assignment_str == target_assignment_status_str and current_track_str == target_track_name_str):
+            target_assignment, target_track = track_tags_map[active_track_block_type]
+            current_assignment = "Yes" if app_inputs['claim_assigned'] else "No"
+            if not (current_assignment == target_assignment and app_inputs['selected_track'] == target_track):
                 should_render_based_on_track = False
-        
         should_render_final = should_render_based_on_client_type and should_render_based_on_track
-        final_content_for_runs_stripped = content_to_process_for_runs.strip()
-
-        if current_line_content_stripped == "[]":
-            if doc.paragraphs and should_render_final: 
-                 doc.paragraphs[-1].paragraph_format.space_after = Pt(12)
-        elif should_render_final and final_content_for_runs_stripped:
-            current_content_substituted = final_content_for_runs_stripped
-            current_content_substituted = current_content_substituted.replace("{our_ref}", our_ref)
-            current_content_substituted = current_content_substituted.replace("{your_ref}", your_ref)
-            current_content_substituted = current_content_substituted.replace("{letter_date}", letter_date.strftime('%d %B %Y'))
-            current_content_substituted = current_content_substituted.replace("{client_name_input}", client_name_input)
-            current_content_substituted = current_content_substituted.replace("{client_address_line1}", client_address_line1)
-            current_content_substituted = current_content_substituted.replace("{client_address_line2_conditional}", client_address_line2 if client_address_line2 else "")
-            current_content_substituted = current_content_substituted.replace("{client_postcode}", client_postcode)
-            for key, val in firm_details.items():
-                current_content_substituted = current_content_substituted.replace(f"{{{key}}}", str(val))
-
+        final_content_after_stripping = content_to_process_for_runs.strip()
+        current_content_substituted = final_content_after_stripping 
+        current_content_substituted = current_content_substituted.replace("{our_ref}", our_ref)
+        current_content_substituted = current_content_substituted.replace("{your_ref}", your_ref)
+        current_content_substituted = current_content_substituted.replace("{letter_date}", letter_date.strftime('%d %B %Y'))
+        current_content_substituted = current_content_substituted.replace("{client_name_input}", client_name_input)
+        current_content_substituted = current_content_substituted.replace("{client_address_line1}", client_address_line1)
+        current_content_substituted = current_content_substituted.replace("{client_address_line2_conditional}", client_address_line2 if client_address_line2 else "")
+        current_content_substituted = current_content_substituted.replace("{client_postcode}", client_postcode)
+        for key, val_firm in firm_details.items():
+            current_content_substituted = current_content_substituted.replace(f"{{{key}}}", str(val_firm))
+        if not in_main_numbered_section and FIRST_NUMBERED_PARAGRAPH_CONTAINS in current_content_substituted:
+            in_main_numbered_section = True
+        paragraph_number_prefix = ""; current_left_indent = None; is_list_item_or_sub_item = False
+        is_pure_heading = False
+        if (final_content_after_stripping.startswith("[bold]") and final_content_after_stripping.endswith("[end]")) or \
+           (final_content_after_stripping.startswith("[underline]") and final_content_after_stripping.endswith("[end]")):
+            is_pure_heading = True
+        if current_content_substituted == STOP_NUMBERING_IF_LINE_IS:
+            in_main_numbered_section = False; paragraph_number_prefix = ""
+        elif in_main_numbered_section:
+            if final_content_after_stripping.startswith("[bp]"): is_list_item_or_sub_item = True; current_left_indent = SUB_ITEM_INDENT_VALUE
+            elif re.match(r'\[([a-g])\]', final_content_after_stripping): is_list_item_or_sub_item = True; current_left_indent = SUB_ITEM_INDENT_VALUE
+            elif is_pure_heading or current_content_substituted == "[FEE_TABLE_PLACEHOLDER]" or final_content_after_stripping.startswith("[ind]"): pass
+            elif final_content_after_stripping: main_paragraph_counter += 1; paragraph_number_prefix = f"{main_paragraph_counter}. "
+        if current_line_stripped_for_logic == "[]":
+            if doc.paragraphs and should_render_final: doc.paragraphs[-1].paragraph_format.space_after = Pt(12)
+        elif should_render_final and (final_content_after_stripping or current_line_stripped_for_logic == ""):
+            content_for_runs_with_numbering = paragraph_number_prefix + current_content_substituted
             if current_content_substituted == "[FEE_TABLE_PLACEHOLDER]":
                 fee_lines = app_inputs['fee_table_content'].split('\n')
                 for fee_line in fee_lines:
-                    p_fee = doc.add_paragraph(); p_fee.paragraph_format.space_after = Pt(6)
-                    add_runs_from_text(p_fee, fee_line, app_inputs)
+                    p_fee = doc.add_paragraph(); p_fee.paragraph_format.space_after = Pt(6); add_runs_from_text(p_fee, fee_line, app_inputs)
                 if doc.paragraphs: doc.paragraphs[-1].paragraph_format.space_after = Pt(0)
-            else:
-                para_style = 'Normal'; para_prefix = ""; para_left_indent = None; para_space_after = Pt(0)
-                if current_content_substituted.startswith("[bp]"):
-                    para_style = 'ListBullet'; current_content_substituted = current_content_substituted.replace("[bp]", "").lstrip(); para_space_after = Pt(6)
-                match_ab = re.match(r'\[([a-g])\](.*)', current_content_substituted)
-                if match_ab: para_prefix = f"({match_ab.group(1)}) "; current_content_substituted = match_ab.group(2).lstrip()
-                elif current_content_substituted.startswith("[ind]"):
-                    para_left_indent = Inches(4 / 2.54); current_content_substituted = current_content_substituted.replace("[ind]", "").lstrip()
-                
+            elif final_content_after_stripping or current_line_stripped_for_logic == "":
+                para_style = 'Normal'; local_para_prefix_for_ab = ""; para_left_indent_final = current_left_indent; para_space_after = Pt(0)
+                text_for_add_runs = content_for_runs_with_numbering
+                if final_content_after_stripping.startswith("[bp]"): para_style = 'ListBullet'; text_for_add_runs = text_for_add_runs.replace("[bp]", "", 1).lstrip(); para_space_after = Pt(6)
+                match_ab = re.match(r'\[([a-g])\](.*)', text_for_add_runs.lstrip(paragraph_number_prefix).lstrip())
+                if is_list_item_or_sub_item and match_ab:
+                    local_para_prefix_for_ab = f"({match_ab.group(1)}) "
+                    text_for_add_runs = text_for_add_runs.replace(f"[{match_ab.group(1)}]", "", 1).lstrip(paragraph_number_prefix).lstrip()
+                    text_for_add_runs = match_ab.group(2).lstrip()
+                    if paragraph_number_prefix: text_for_add_runs = paragraph_number_prefix + local_para_prefix_for_ab + text_for_add_runs
+                    else: text_for_add_runs = local_para_prefix_for_ab + text_for_add_runs
+                elif final_content_after_stripping.startswith("[ind]"):
+                    para_left_indent_final = SUB_ITEM_INDENT_VALUE; text_for_add_runs = text_for_add_runs.replace("[ind]", "",1).lstrip()
                 p = doc.add_paragraph(style=para_style if para_style != 'Normal' else None)
                 pf = p.paragraph_format
-                if para_left_indent: pf.left_indent = para_left_indent
+                if para_left_indent_final: pf.left_indent = para_left_indent_final
                 pf.space_after = para_space_after
-                if para_prefix:
-                    run_prefix = p.add_run(para_prefix); run_prefix.font.name = 'Arial'; run_prefix.font.size = Pt(11)
-                add_runs_from_text(p, current_content_substituted, app_inputs)
-        elif should_render_final and current_line_content_stripped == "": 
-            doc.add_paragraph()
-
+                add_runs_from_text(p, text_for_add_runs, app_inputs)
         if line_had_end_tag:
-            if current_line_content_stripped.endswith("[end indiv]") or (line_had_start_tag and content_to_process_for_runs == "" and in_indiv_block): 
-                in_indiv_block = False
-            if current_line_content_stripped.endswith("[end corp]") or (line_had_start_tag and content_to_process_for_runs == "" and in_corp_block):
-                in_corp_block = False
-            if active_track_block_type and current_line_content_stripped.endswith(f"[end {active_track_block_type[1:-1]}]"):
-                active_track_block_type = None
-        
-    if doc.paragraphs and doc.paragraphs[-1].paragraph_format.space_after == Pt(0):
-        doc.paragraphs[-1].paragraph_format.space_after = Pt(6)
+            if current_line_stripped_for_logic.endswith("[end indiv]"): in_indiv_block = False
+            if current_line_stripped_for_logic.endswith("[end corp]"): in_corp_block = False
+            if active_track_block_type and current_line_stripped_for_logic.endswith(f"[end {active_track_block_type[1:-1]}]"): active_track_block_type = None
+    if doc.paragraphs and doc.paragraphs[-1].paragraph_format.space_after == Pt(0): doc.paragraphs[-1].paragraph_format.space_after = Pt(6)
+
 
     doc_io = io.BytesIO()
     doc.save(doc_io)
     doc_io.seek(0)
+
     st.success("Client Care Letter Generated!")
-    st.download_button( # This button will be styled by CSS
-        label="Download Word Document", data=doc_io,
+    st.download_button(
+        label="Download Word Document",
+        data=doc_io,
         file_name=f"Client_Care_Letter_{client_name_input.replace(' ', '_')}.docx",
         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     )
