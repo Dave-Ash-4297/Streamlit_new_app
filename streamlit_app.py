@@ -1,17 +1,19 @@
 import streamlit as st
 from docx import Document
-from docx.shared import Pt, Inches, Cm
+from docx.shared import Pt, Inches, Cm # Ensure Cm is imported
 from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
+# from docx.enum.style import WD_STYLE_TYPE # For custom styles if needed
 import io
 from datetime import datetime
 import re
 
 # --- Helper function to process inline formatting and placeholders ---
 def add_runs_from_text(paragraph, text_line, app_inputs):
+    # Centralized placeholder replacement
     text_line = text_line.replace("[qu 1 set out the nature of the dispute - start and end lower case]", app_inputs.get('qu1_dispute_nature', ""))
     text_line = text_line.replace("[qu 2 set out the immediate steps that will be taken (this maybe a review of the facts and papers to allow you to advise in writing or making initial court applications or taking the first step, prosecuting or defending in a mainstream action). If you have agreed to engage counsel or other third party to assist you should also say so here – start and end lower case]", app_inputs.get('qu2_initial_steps', ""))
-    text_line = text_line.replace("[qu3 Explain the estimated time scales to complete the Work. Start capital and end full stop]", app_inputs.get('qu3_timescales', "")) 
-    text_line = text_line.replace("qu3 Explain the estimated time scales to complete the initial and any ongoing Work. CAPITAL Start capital and end full stop \".\"", app_inputs.get('qu3_timescales', "")) 
+    text_line = text_line.replace("[qu3 Explain the estimated time scales to complete the Work. Start capital and end full stop]", app_inputs.get('qu3_timescales', ""))
+    text_line = text_line.replace("qu3 Explain the estimated time scales to complete the initial and any ongoing Work. CAPITAL Start capital and end full stop \".\"", app_inputs.get('qu3_timescales', ""))
     text_line = text_line.replace("£ [qu4_ what is the value of the estimated initial costs xx,xxx?]", f"£{app_inputs.get('qu4_initial_costs_estimate', 'XX,XXX')}")
 
     text_line = text_line.replace("{our_ref}", str(app_inputs.get('our_ref', '')))
@@ -21,11 +23,11 @@ def add_runs_from_text(paragraph, text_line, app_inputs):
     text_line = text_line.replace("{client_address_line1}", str(app_inputs.get('client_address_line1', '')))
     text_line = text_line.replace("{client_address_line2_conditional}", str(app_inputs.get('client_address_line2_conditional', '')))
     text_line = text_line.replace("{client_postcode}", str(app_inputs.get('client_postcode', '')))
-    text_line = text_line.replace("{name}", str(app_inputs.get('name', ''))) 
+    text_line = text_line.replace("{name}", str(app_inputs.get('name', '')))
 
-    for key, val in app_inputs.get('firm_details', {}).items(): 
+    for key, val in app_inputs.get('firm_details', {}).items():
         text_line = text_line.replace(f"{{{key}}}", str(val))
-        
+
     parts = re.split(r'(\[bold\]|\[end bold\]|\[italics\]|\[end italics\]|\[underline\]|\[end underline\]|\[end\])', text_line)
     is_bold = False
     is_italic = False
@@ -44,8 +46,8 @@ def add_runs_from_text(paragraph, text_line, app_inputs):
             if is_bold: run.bold = True
             if is_italic: run.italic = True
             if is_underline: run.underline = True
-            run.font.name = 'Arial'
-            run.font.size = Pt(11)
+            run.font.name = 'Arial' # Keep this for run-level styling
+            run.font.size = Pt(11) # Keep this for run-level styling
 
 # --- Helper to decide if an optional paragraph version should be rendered ---
 def should_render_paragraph_version(p_num, p_version, app_inputs):
@@ -70,18 +72,18 @@ def should_render_paragraph_version(p_num, p_version, app_inputs):
         if p_version == '7': return not is_allocated and track == "Intermediate Track"
         if p_version == '8': return not is_allocated and track == "Multi Track"
         return False
-    return True 
+    return True
 
 # --- Pre-parser for precedent_content ---
 def preprocess_precedent(precedent_text, app_inputs):
     logical_elements = []
-    current_paragraph_builder = None 
+    current_paragraph_builder = None
 
-    para_tag_regex = re.compile(r'\[(\d+)((?:-(\d+))?)\]')       
-    para_end_tag_regex = re.compile(r'\[/(\d+)((?:-(\d+))?)\]') 
+    para_tag_regex = re.compile(r'\[(\d+)((?:-(\d+))?)\]')
+    para_end_tag_regex = re.compile(r'\[/(\d+)((?:-(\d+))?)\]')
 
     for raw_line in precedent_text.splitlines():
-        line_to_process = raw_line 
+        line_to_process = raw_line
 
         while line_to_process:
             m_start = para_tag_regex.search(line_to_process)
@@ -92,48 +94,48 @@ def preprocess_precedent(precedent_text, app_inputs):
                 if m_end and m_end.group(1) == current_paragraph_builder['num'] and \
                    (m_end.group(3) if m_end.group(2) else None) == current_paragraph_builder['version']:
                     current_block_end_pos = m_end.start()
-                
-                if current_block_end_pos != -1: 
+
+                if current_block_end_pos != -1:
                     content_before_end_tag = line_to_process[:current_block_end_pos]
                     current_paragraph_builder['lines'].append(content_before_end_tag)
-                    
+
                     if current_paragraph_builder['is_selected_for_render']:
                         logical_elements.append({
                             'type': 'paragraph_block',
-                            'paragraph_display_number_text': current_paragraph_builder['paragraph_display_number_text'],
-                            'content_lines': current_paragraph_builder['lines'] 
+                            'paragraph_display_number_text': current_paragraph_builder['paragraph_display_number_text'], # Still useful to identify type
+                            'content_lines': current_paragraph_builder['lines']
                         })
                     current_paragraph_builder = None
-                    line_to_process = line_to_process[m_end.end():] 
-                else: 
+                    line_to_process = line_to_process[m_end.end():]
+                else:
                     current_paragraph_builder['lines'].append(line_to_process)
-                    line_to_process = "" 
-            
-            elif m_start: 
+                    line_to_process = ""
+
+            elif m_start:
                 content_before_tag = line_to_process[:m_start.start()]
-                if content_before_tag: 
+                if content_before_tag:
                     logical_elements.append({'type': 'raw_line', 'content': content_before_tag})
 
                 p_num = m_start.group(1)
-                p_version = m_start.group(3) if m_start.group(2) else None 
+                p_version = m_start.group(3) if m_start.group(2) else None
 
                 selected = should_render_paragraph_version(p_num, p_version, app_inputs)
-                
-                current_paragraph_builder = {
-                    'num': p_num, 
-                    'version': p_version, 
-                    'lines': [], 
-                    'is_selected_for_render': selected,
-                    'paragraph_display_number_text': f"{p_num}." 
-                }
-                line_to_process = line_to_process[m_start.end():] 
-            
-            else: 
-                if line_to_process: 
-                    logical_elements.append({'type': 'raw_line', 'content': line_to_process})
-                line_to_process = "" 
 
-    if current_paragraph_builder: 
+                current_paragraph_builder = {
+                    'num': p_num,
+                    'version': p_version,
+                    'lines': [],
+                    'is_selected_for_render': selected,
+                    'paragraph_display_number_text': f"{p_num}." # Keep for identification
+                }
+                line_to_process = line_to_process[m_start.end():]
+
+            else:
+                if line_to_process:
+                    logical_elements.append({'type': 'raw_line', 'content': line_to_process})
+                line_to_process = ""
+
+    if current_paragraph_builder:
         st.warning(f"Unterminated paragraph block: [{current_paragraph_builder['num']}"
                    f"{'-'+current_paragraph_builder['version'] if current_paragraph_builder['version'] else ''}]. "
                    f"Content included if selected.")
@@ -188,6 +190,7 @@ claim_assigned_input = st.sidebar.radio("Is the claim already assigned to a cour
 track_options = ["Small Claims Track", "Fast Track", "Intermediate Track", "Multi Track"]
 selected_track = st.sidebar.selectbox("Which court track applies or is anticipated?", track_options, key="track_select")
 
+
 st.header("Dynamic Content (Answers to Questions)")
 qu1_dispute_nature = st.text_area("Q1: Nature of the Dispute (for 'the Dispute')",
                                   "a contractual matter related to services provided", height=75)
@@ -201,7 +204,7 @@ fee_table_content = st.text_area("Fee Table Content (to be inserted in 'Costs an
                                  "Partner: £XXX per hour\nSenior Associate: £YYY per hour\nSolicitor: £ZZZ per hour\nParalegal: £AAA per hour",
                                  height=150)
 
-# --- Precedent Text ---
+# --- Precedent Text (Your existing precedent_content string) ---
 precedent_content = """
 Our Ref: {our_ref}
 Your Ref: {your_ref}
@@ -226,7 +229,7 @@ Dear {client_name_input},
 []
 [bold]Timescales[end]
 []
-[5]qu3 Explain the estimated time scales to to complete the initial and any ongoing Work. CAPITAL Start capital and end full stop "." [/5]
+[5]qu3 Explain the estimated time scales to complete the initial and any ongoing Work. CAPITAL Start capital and end full stop "." [/5]
 []
 [bold]Action Required To Be Taken By You[end]
 []
@@ -295,7 +298,7 @@ Dear {client_name_input},
 []
 [underline]Section 74 Solicitors Act 1974 Agreement & Recovery of Costs[end]
 []
-[20]It is common in litigation that even where costs are recoverable from an opponent, such recovery will not equate to the level of costs incurred by the successful party. Our agreement expressly permits us to charge an amount of costs greater than that which you will recover or could have recovered from your opponent, and expressly permits payment of such sum.[/20]
+[20]It is common in litigation that even where costs are recoverable from an opponent, such recovery will not equate to the level of costs incurred by the successful party. Our agreement expressly permits us to charge an amount of costs greater than that which you will recover or could have recovered from your opponent, and expresslypermits payment of such sum.[/20]
 []
 [21]This part of our agreement is made under section 74(3) of the Solicitors Act 1974 and Civil Procedure Rules 46.9 (2) and (3).[/21]
 []
@@ -334,7 +337,7 @@ Dear {client_name_input},
 []
 [ind]There are some exceptions to the normal rule and the Court can award costs against a party that has acted unreasonably. However, in practice such awards are rare.[/24-5][end sc]
 [ft][24-6]From the information that you have supplied us with, it is likely that were Court proceedings to be commenced, the claim would be allocated to the Fast Track which is the normal track for claims with a monetary value of between £10,000 and £25,000. Upon allocation to the Fast Track, the Court will assign your/your opponent’s claim to one of four ‘bands’ depending upon the complexity and number of issues in the claim. When the claim is assigned, as the Claimant/Defendant in the proceedings, we will know that the costs that may be recoverable from your opponent/you will be fixed dependent upon the stage of the proceedings in which the claim is resolved. A table setting out these fixed recoverable costs is enclosed with this letter.[/24-6][end ft]
-[int][24-7]From the information that you have supplied us with, it is likely that were Court proceedings to be commenced, the claim would be allocated to the Intermediate Track which is the normal track for claims with a monetary value of between £25,000 and £100,000. Upon allocation to the Intermediate Track, the Court will assign your/your opponent’s claim to one of four ‘bands’ depending upon the complexity and number of issues in the claim. When the claim is assigned, as the Claimant/Defendant in the proceedings, we will know that the costs that may be recoverable from your opponent/you will be fixed dependent upon the stage of the proceedings in which the claim is resolved. A table setting out these fixed recoverable costs is enclosed with this letter.[/24-7][end int]
+[int][24-7]From the information that you have supplied us with, it is likely that were Court proceedings to be commenced, the claim would be allocated to the Intermediate Track which is the normal track for claims with a monetary value of between £25,000 and £100,000. Upon allocation to the Intermediate Track, the Court will assign your/your opponent’s claim to one of four ‘bands’ depending upon the complexity and number of issues in the claim. When the claim is assigned, as the Claimant/Defendant in the proceedings, we will know that the costs that may be recoverable from your opponent/you will be fixed dependent upon the stage of the proceedings inịch the claim is resolved. A table setting out these fixed recoverable costs is enclosed with this letter.[/24-7][end int]
 [mt][24-8]From the information that you have supplied us with, it is likely that were Court proceedings to be commenced, the claim would be allocated to the Multi-Track which is the normal track for claims with a monetary value of in excess of £100,000. Upon allocation to the Multi-Track, the fixed costs regime will not apply to your/your opponent’s claim and the general rule that the ‘loser pays the winner’s costs’ will apply, subject to any costs budgeting that has been implemented by the Court and the caveats set out above under the heading [italics]Section 74 Solicitors Act 1974 Agreement & Recovery of Costs[end italics].[/24-8][end mt]
 []
 [underline]Costs Advice[end]
@@ -351,7 +354,7 @@ Dear {client_name_input},
 []
 [30]To this extent, you agree with us that our retainer in this matter is not to be considered an entire agreement, such that we are not obliged to continue acting for you to the conclusion of the matter and are entitled to terminate your retainer before your case is concluded. We are required to make this clear because there has been legal authority that in the absence of such clarity a firm was required to continue acting in a case where they were no longer being funded to do so.[/30]
 []
-[31]You have a right to ask for your overall cost to be limited to a maximum and we trust you will liaise with us if you wish to limit your costs. We will not then exceed this limit without first obtaining your consent. However this does mean that your case may not be concluded if we have reached your cost limit.[/31]
+[31]You have a right to ask for your overall cost to be limited to a maximum and we trust you will lialiaise with us if you wish to limit your costs. We will not then exceed this limit without first obtaining your consent. However this does mean that your case may not be concluded if we have reached your cost limit.[/31]
 []
 [32]In Court or some Tribunal proceedings, you may be ordered to pay the costs of someone else, either in relation to the whole of the costs of the case if you are unsuccessful or in relation to some part or issue in the case. Also, you may be ordered to pay the costs of another party during the course of proceedings in relation to a particular application to the Court. In such case you will need to provide this firm with funds to discharge such liability within seven days as failure to do so may prevent your case progressing. Please be aware that once we issue a Court or certain Tribunal claims or counterclaim on your behalf, you are generally unable to discontinue your claim or counterclaim without paying the costs of your opponent unless an agreement on costs is reached.[/32]
 []
@@ -379,7 +382,7 @@ Dear {client_name_input},
 []
 [38]The enclosed Privacy Notice explains how and why we collect, store, use and share your personal data. It also explains your rights in relation to your personal data and how to contact us or supervisory authorities in the event you have a complaint. Please read it carefully. This Privacy Notice is also available on our website, www.ramsdens.co.uk.[/38]
 []
-[39]Our use of your personal data is subject to your instructions, the EU General Data Protection Regulation (GDPR), other relevant UK and EU legislation and our professional duty of confidentiality. Under data protection law, we can only use your personal data if we have a proper reason for doing so. Detailed reasons why we may process your personal data are set out in our Privacy Notice but examples are:[/39]
+[39]Our use of your personal data is subject to your instructions, the EU General Data Protection Regulation (GDPR), other relevant UK and EU legislation and our professional duty of confidentiality. Under data-protection law, we can only use your personal data if we have a proper reason for doing so. Detailed reasons why we may process your personal data are set out in our Privacy Notice but examples are:[/39]
 []
 [a]To comply with our legal and regulatory obligations;
 [b]For the performance of our contract with you or to take steps at your request before entering into a contract; or
@@ -411,6 +414,7 @@ Yours sincerely,
 Solicitor
 """.strip()
 
+
 if st.button("Generate Client Care Letter"):
     app_inputs = {
         'qu1_dispute_nature': qu1_dispute_nature,
@@ -428,42 +432,57 @@ if st.button("Generate Client Care Letter"):
         'client_address_line1': client_address_line1,
         'client_address_line2_conditional': client_address_line2 if client_address_line2 else "",
         'client_postcode': client_postcode,
-        'name': firm_details["person_responsible_name"], 
-        'firm_details': firm_details 
+        'name': firm_details["person_responsible_name"],
+        'firm_details': firm_details
     }
 
     doc = Document()
+    # Set default font for the document body (styles can override this)
     style = doc.styles['Normal']
     font = style.font
     font.name = 'Arial'
     font.size = Pt(11)
+    # Ensure paragraphs in 'Normal' style are justified by default
+    # Normal style itself usually isn't justified, but we want document default to be.
+    # However, it's better to set justification on a per-paragraph basis or on specific styles.
+    # For now, we'll set it per paragraph.
 
     logical_document_elements = preprocess_precedent(precedent_content, app_inputs)
 
     in_indiv_block = False
     in_corp_block = False
-    active_track_block = None 
+    active_track_block = None
 
     lines_to_process_for_docx = []
     for element in logical_document_elements:
         if element['type'] == 'raw_line':
-            lines_to_process_for_docx.append({'text': element['content'], 'is_first_numbered_line': False})
+            lines_to_process_for_docx.append({'text': element['content'], 'is_numbered_block_line': False})
         elif element['type'] == 'paragraph_block':
-            para_num_text = element['paragraph_display_number_text']
+            # para_num_text = element['paragraph_display_number_text'] # We won't use this to prefix text
             first_content_line_of_block = True
             for internal_line in element['content_lines']:
                 line_text_to_add = internal_line
                 is_this_first_numbered = False
                 if first_content_line_of_block and internal_line.strip():
-                    line_text_to_add = f"{para_num_text} {internal_line.lstrip()}" 
+                    # Don't add the number prefix; Word will handle it via style
+                    line_text_to_add = internal_line.lstrip()
                     is_this_first_numbered = True
                     first_content_line_of_block = False
-                lines_to_process_for_docx.append({'text': line_text_to_add, 'is_first_numbered_line': is_this_first_numbered})
+                lines_to_process_for_docx.append({'text': line_text_to_add, 'is_numbered_block_line': is_this_first_numbered})
+
+
+    # Constants for indentation
+    INDENT_FOR_IND_TAG_CM = 1.25
+    SUB_LETTER_HANGING_OFFSET_CM = 0.50
+    SUB_LETTER_TEXT_INDENT_NO_IND_CM = 1.25
+
 
     for line_item in lines_to_process_for_docx:
         line_for_docx_processing_raw = line_item['text']
-        is_first_line_of_a_numbered_block = line_item['is_first_numbered_line']
-        
+        # Renamed for clarity: this flag now means "this is the first line of a [1] type block"
+        is_main_numbered_paragraph = line_item['is_numbered_block_line']
+
+
         stripped_content_for_condition_check = line_for_docx_processing_raw.strip()
         if stripped_content_for_condition_check == "[indiv]": in_indiv_block = True; continue
         if stripped_content_for_condition_check == "[end indiv]": in_indiv_block = False; continue
@@ -480,7 +499,7 @@ if st.button("Generate Client Care Letter"):
         if in_indiv_block and app_inputs['client_type'] != "Individual": continue
         if in_corp_block and app_inputs['client_type'] != "Corporate": continue
         if active_track_block:
-            should_render_current_track_content = False 
+            should_render_current_track_content = False
             is_allocated = app_inputs['claim_assigned']; track_name = app_inputs['selected_track']
             if active_track_block == '[all_sc]' and is_allocated and track_name == "Small Claims Track": should_render_current_track_content = True
             elif active_track_block == '[all_ft]' and is_allocated and track_name == "Fast Track": should_render_current_track_content = True
@@ -497,10 +516,10 @@ if st.button("Generate Client Care Letter"):
         if line_for_docx_processing_raw.strip() == "[]":
             if doc.paragraphs: doc.paragraphs[-1].paragraph_format.space_after = Pt(12)
             continue
-        elif not line_for_docx_processing: 
+        elif not line_for_docx_processing:
             if doc.paragraphs: doc.paragraphs[-1].paragraph_format.space_after = Pt(12)
             continue
-        
+
         if line_for_docx_processing == "[FEE_TABLE_PLACEHOLDER]":
             fee_lines_content = app_inputs.get('fee_table_content', '').split('\n')
             for fee_item_line in fee_lines_content:
@@ -508,72 +527,95 @@ if st.button("Generate Client Care Letter"):
                 p_fee.paragraph_format.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
                 p_fee.paragraph_format.space_after = Pt(6)
                 add_runs_from_text(p_fee, fee_item_line, app_inputs)
-            if doc.paragraphs and fee_lines_content: 
+            if doc.paragraphs and fee_lines_content:
                 doc.paragraphs[-1].paragraph_format.space_after = Pt(0)
             continue
 
         text_content_for_runs = line_for_docx_processing
-        current_paragraph_style_name = 'Normal'
-        space_after_val_pt = Pt(0) 
+        current_paragraph_style_name = 'Normal' # Default style
+        space_after_val_pt = Pt(0)
         current_format_type = "normal"
 
-        if is_first_line_of_a_numbered_block:
-            parts = text_content_for_runs.split(" ", 1)
-            if len(parts) == 2: text_content_for_runs = f"{parts[0]}\t{parts[1]}"
-            current_format_type = "numbered"
+        # Determine format type based on tags
+        if is_main_numbered_paragraph:
+            # This is a paragraph like [1], [2], etc.
+            # Word will handle numbering and its basic indent via the 'List Number' style.
+            current_paragraph_style_name = 'List Number'
+            current_format_type = "main_numbered_auto" # New type
         else:
             original_line_had_ind_tag = text_content_for_runs.startswith("[ind]")
             if original_line_had_ind_tag:
                 text_content_for_runs = text_content_for_runs.replace("[ind]", "", 1).lstrip()
-                current_format_type = "ind_block_only" 
+                current_format_type = "ind_block_only"
 
             sub_letter_match = re.match(r'^\[([a-zA-Z])\](.*)', text_content_for_runs)
             if sub_letter_match:
                 letter = sub_letter_match.group(1)
                 rest_of_text = sub_letter_match.group(2).lstrip()
-                text_content_for_runs = f"({letter.lower()})\t{rest_of_text}" 
+                text_content_for_runs = f"({letter.lower()})\t{rest_of_text}" # Manual sub-letter with tab
                 current_format_type = "sub_letter"
-            
             elif text_content_for_runs.startswith("[bp]"):
-                current_paragraph_style_name = 'ListBullet'
+                current_paragraph_style_name = 'ListBullet' # Use Word's bullet style
                 text_content_for_runs = text_content_for_runs.replace("[bp]", "", 1).lstrip()
                 space_after_val_pt = Pt(6)
-                current_format_type = "ind_bullet" if original_line_had_ind_tag else "bullet"
-        
-        if not text_content_for_runs.strip() and not (current_paragraph_style_name == 'ListBullet' and not text_content_for_runs):
-            continue
+                current_format_type = "ind_bullet" if original_line_had_ind_tag else "bullet_auto"
 
-        p = doc.add_paragraph(style=current_paragraph_style_name if current_paragraph_style_name != 'Normal' else None)
+
+        if not text_content_for_runs.strip() and not (current_paragraph_style_name in ['ListBullet', 'List Number'] and not text_content_for_runs):
+            # Allow empty bullet/list items if style is applied, Word handles this
+            if current_paragraph_style_name == 'Normal':
+                continue
+
+
+        p = doc.add_paragraph(style=current_paragraph_style_name) # Apply style here
         pf = p.paragraph_format
+        # Global rule: all paragraphs are justified unless a style strongly overrides it to left/center.
+        # 'List Number' and 'ListBullet' might default to left, so we override here if justify is always wanted.
         pf.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
         pf.tab_stops.clear_all()
 
-        if current_format_type == "numbered":
-            pf.left_indent = Cm(0.75)
-            pf.first_line_indent = Cm(-0.75)
-            pf.tab_stops.add_tab_stop(Cm(0.75))
-        elif current_format_type == "sub_letter":
-            pf.left_indent = Cm(1.25)
-            pf.first_line_indent = Cm(-0.50) 
-            pf.tab_stops.add_tab_stop(Cm(1.25))
-        elif current_format_type == "bullet": 
+
+        if current_format_type == "main_numbered_auto":
+            # Indentation and numbering are handled by the 'List Number' style.
+            # No explicit indentation needed here normally.
+            # Font of the number itself comes from 'List Number' style.
+            # Font of the text comes from `add_runs_from_text`.
             pass
-        elif current_format_type == "ind_bullet":
-            pf.left_indent = Cm(1.75)
-        elif current_format_type == "ind_block_only":
-            pf.left_indent = Cm(1.25)
-            pf.first_line_indent = Cm(0) 
-            pf.tab_stops.add_tab_stop(Cm(1.25))
-        
-        pf.space_after = space_after_val_pt 
+        elif current_format_type == "sub_letter":
+            if original_line_had_ind_tag:
+                text_body_indent_cm = INDENT_FOR_IND_TAG_CM + SUB_LETTER_HANGING_OFFSET_CM
+                pf.left_indent = Cm(text_body_indent_cm)
+                pf.first_line_indent = Cm(-SUB_LETTER_HANGING_OFFSET_CM)
+                pf.tab_stops.add_tab_stop(Cm(text_body_indent_cm))
+            else:
+                pf.left_indent = Cm(SUB_LETTER_TEXT_INDENT_NO_IND_CM)
+                pf.first_line_indent = Cm(-SUB_LETTER_HANGING_OFFSET_CM)
+                pf.tab_stops.add_tab_stop(Cm(SUB_LETTER_TEXT_INDENT_NO_IND_CM))
+        elif current_format_type == "bullet_auto": # [bp] without [ind]
+            # Indentation and bullet are handled by 'ListBullet' style.
+            pass
+        elif current_format_type == "ind_bullet": # [ind][bp]
+            pf.left_indent = Cm(INDENT_FOR_IND_TAG_CM)
+            # 'ListBullet' style's own indentations will apply relative to this.
+        elif current_format_type == "ind_block_only": # [ind] Text
+            pf.left_indent = Cm(INDENT_FOR_IND_TAG_CM)
+            pf.first_line_indent = Cm(0)
+            pf.tab_stops.add_tab_stop(Cm(INDENT_FOR_IND_TAG_CM))
+        elif current_format_type == "normal": # Plain text line
+             # No specific indents unless it's a 'Normal' style paragraph that needs something special
+             # pf.left_indent = Cm(0) # Default, already set
+             pass
+
+
+        pf.space_after = space_after_val_pt
         add_runs_from_text(p, text_content_for_runs, app_inputs)
 
-        if current_paragraph_style_name == 'Normal' and current_format_type == "normal":
-            for run in p.runs:
-                if not run.font.name: run.font.name = 'Arial'
-                if not run.font.size: run.font.size = Pt(11)
-    
-    if doc.paragraphs: 
+        # The `add_runs_from_text` sets Arial 11pt on runs.
+        # If the paragraph style (like 'List Number' or 'ListBullet')
+        # has a different font, Word's behavior for run vs. paragraph style font can be complex.
+        # Generally, explicit run formatting wins.
+
+    if doc.paragraphs:
         if doc.paragraphs[-1].paragraph_format.space_after == Pt(0):
              doc.paragraphs[-1].paragraph_format.space_after = Pt(6)
 
