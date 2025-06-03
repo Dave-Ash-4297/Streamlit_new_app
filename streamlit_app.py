@@ -1,15 +1,13 @@
 import streamlit as st
 from docx import Document
-from docx.shared import Pt, Inches, Cm # Ensure Cm is imported
+from docx.shared import Pt, Inches, Cm
 from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
-# from docx.enum.style import WD_STYLE_TYPE # For custom styles if needed
 import io
 from datetime import datetime
 import re
 
 # --- Helper function to process inline formatting and placeholders ---
 def add_runs_from_text(paragraph, text_line, app_inputs):
-    # Centralized placeholder replacement
     text_line = text_line.replace("[qu 1 set out the nature of the dispute - start and end lower case]", app_inputs.get('qu1_dispute_nature', ""))
     text_line = text_line.replace("[qu 2 set out the immediate steps that will be taken (this maybe a review of the facts and papers to allow you to advise in writing or making initial court applications or taking the first step, prosecuting or defending in a mainstream action). If you have agreed to engage counsel or other third party to assist you should also say so here – start and end lower case]", app_inputs.get('qu2_initial_steps', ""))
     text_line = text_line.replace("[qu3 Explain the estimated time scales to complete the Work. Start capital and end full stop]", app_inputs.get('qu3_timescales', "")) 
@@ -190,7 +188,6 @@ claim_assigned_input = st.sidebar.radio("Is the claim already assigned to a cour
 track_options = ["Small Claims Track", "Fast Track", "Intermediate Track", "Multi Track"]
 selected_track = st.sidebar.selectbox("Which court track applies or is anticipated?", track_options, key="track_select")
 
-
 st.header("Dynamic Content (Answers to Questions)")
 qu1_dispute_nature = st.text_area("Q1: Nature of the Dispute (for 'the Dispute')",
                                   "a contractual matter related to services provided", height=75)
@@ -204,7 +201,7 @@ fee_table_content = st.text_area("Fee Table Content (to be inserted in 'Costs an
                                  "Partner: £XXX per hour\nSenior Associate: £YYY per hour\nSolicitor: £ZZZ per hour\nParalegal: £AAA per hour",
                                  height=150)
 
-# --- Precedent Text (Your existing precedent_content string) ---
+# --- Precedent Text ---
 precedent_content = """
 Our Ref: {our_ref}
 Your Ref: {your_ref}
@@ -229,7 +226,7 @@ Dear {client_name_input},
 []
 [bold]Timescales[end]
 []
-[5]qu3 Explain the estimated time scales to complete the initial and any ongoing Work. CAPITAL Start capital and end full stop "." [/5]
+[5]qu3 Explain the estimated time scales to to complete the initial and any ongoing Work. CAPITAL Start capital and end full stop "." [/5]
 []
 [bold]Action Required To Be Taken By You[end]
 []
@@ -354,7 +351,7 @@ Dear {client_name_input},
 []
 [30]To this extent, you agree with us that our retainer in this matter is not to be considered an entire agreement, such that we are not obliged to continue acting for you to the conclusion of the matter and are entitled to terminate your retainer before your case is concluded. We are required to make this clear because there has been legal authority that in the absence of such clarity a firm was required to continue acting in a case where they were no longer being funded to do so.[/30]
 []
-[31]You have a right to ask for your overall cost to be limited to a maximum and we trust you will lialiaise with us if you wish to limit your costs. We will not then exceed this limit without first obtaining your consent. However this does mean that your case may not be concluded if we have reached your cost limit.[/31]
+[31]You have a right to ask for your overall cost to be limited to a maximum and we trust you will liaise with us if you wish to limit your costs. We will not then exceed this limit without first obtaining your consent. However this does mean that your case may not be concluded if we have reached your cost limit.[/31]
 []
 [32]In Court or some Tribunal proceedings, you may be ordered to pay the costs of someone else, either in relation to the whole of the costs of the case if you are unsuccessful or in relation to some part or issue in the case. Also, you may be ordered to pay the costs of another party during the course of proceedings in relation to a particular application to the Court. In such case you will need to provide this firm with funds to discharge such liability within seven days as failure to do so may prevent your case progressing. Please be aware that once we issue a Court or certain Tribunal claims or counterclaim on your behalf, you are generally unable to discontinue your claim or counterclaim without paying the costs of your opponent unless an agreement on costs is reached.[/32]
 []
@@ -413,7 +410,6 @@ Yours sincerely,
 {name}
 Solicitor
 """.strip()
-
 
 if st.button("Generate Client Care Letter"):
     app_inputs = {
@@ -536,7 +532,7 @@ if st.button("Generate Client Care Letter"):
                 letter = sub_letter_match.group(1)
                 rest_of_text = sub_letter_match.group(2).lstrip()
                 text_content_for_runs = f"({letter.lower()})\t{rest_of_text}" 
-                current_format_type = "sub_letter" # This applies whether [ind] was there or not
+                current_format_type = "sub_letter"
             
             elif text_content_for_runs.startswith("[bp]"):
                 current_paragraph_style_name = 'ListBullet'
@@ -556,24 +552,22 @@ if st.button("Generate Client Care Letter"):
             pf.left_indent = Cm(0.75)
             pf.first_line_indent = Cm(-0.75)
             pf.tab_stops.add_tab_stop(Cm(0.75))
-        elif current_format_type == "sub_letter": # Handles [a] and [ind][a] with the same formatting
+        elif current_format_type == "sub_letter":
             pf.left_indent = Cm(1.25)
             pf.first_line_indent = Cm(-0.50) 
             pf.tab_stops.add_tab_stop(Cm(1.25))
         elif current_format_type == "bullet": 
-            pass # Rely on ListBullet style's default indents
-        elif current_format_type == "ind_bullet": # [ind][bp]
-            pf.left_indent = Cm(1.75) # Base indent from [ind]
-            # ListBullet style's own indentations for bullet and text will apply relative to this margin.
-        elif current_format_type == "ind_block_only": # Just [ind], and not overridden by [a]
+            pass
+        elif current_format_type == "ind_bullet":
             pf.left_indent = Cm(1.75)
+        elif current_format_type == "ind_block_only":
+            pf.left_indent = Cm(1.25)
             pf.first_line_indent = Cm(0) 
-            pf.tab_stops.add_tab_stop(Cm(1.75))
+            pf.tab_stops.add_tab_stop(Cm(1.25))
         
         pf.space_after = space_after_val_pt 
         add_runs_from_text(p, text_content_for_runs, app_inputs)
 
-        # Only apply default font to truly 'normal' paragraphs that didn't get styled
         if current_paragraph_style_name == 'Normal' and current_format_type == "normal":
             for run in p.runs:
                 if not run.font.name: run.font.name = 'Arial'
@@ -594,4 +588,3 @@ if st.button("Generate Client Care Letter"):
         file_name=f"Client_Care_Letter_{client_name_input.replace(' ', '_')}.docx",
         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     )
-    
