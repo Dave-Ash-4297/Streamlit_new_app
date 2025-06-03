@@ -387,10 +387,10 @@ Dear {client_name_input},
 [a]To comply with our legal and regulatory obligations;
 [b]For the performance of our contract with you or to take steps at your request before entering into a contract; or
 [c]For our legitimate interests or those of a third party, including:
-[ind][bp]Operational reasons, such as recording transactions, training and quality control;
-[ind][bp]Updating and enhancing client records;
-[ind][bp]Analysis to help us manage our practice; and
-[ind][bp]Marketing, such as by sending you updates about subjects and/or events that may be of interest to you.[/39]
+[i]Operational reasons, such as recording transactions, training and quality control;
+[ii]Updating and enhancing client records;
+[iii]Analysis to help us manage our practice; and
+[iv]Marketing, such as by sending you updates about subjects and/or events that may be of interest to you.
 []
 [40]However, this does not apply to processing sensitive personal data about you, as defined. If it is necessary to process this data for the continued provision of our services to you, we will need your explicit consent for doing so and will request this from you as required.[/40]
 []
@@ -402,9 +402,9 @@ Dear {client_name_input},
 []
 [43]You have the right to opt out of receiving promotional communications at any time, by:
 []
-[ind]- Contacting us by email on {marketing_email};
-[ind]- Using the ‘unsubscribe’ link in emails; or
-[ind]- Writing to Marketing Department at: {marketing_address}.[/43]
+[a]Contacting us by email on {marketing_email};
+[b]Using the ‘unsubscribe’ link in emails; or
+[c]Writing to Marketing Department at: {marketing_address}.[/43]
 []
 Yours sincerely,
 []
