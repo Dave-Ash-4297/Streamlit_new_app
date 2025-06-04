@@ -239,7 +239,7 @@ Dear {client_name_input},
 [corp][7]We will make our own enquiries and obtain documentation from Companies House to identify our corporate client. If you believe Companies House’s records to be out of date, please let us know as soon as possible. We may also require documentation or information from the company itself.[/7]
 [8]We are also obliged to identify the individuals at the corporate client who provide us with instructions, which usually means directors of limited companies or members/partners in LLPs, and sometimes we must do the same for “beneficial owners”. Either situation may include you as the recipient of this letter, but may also include other people at the business. We will tell you who else may be required to provide identification.[/8][end corp]
 []
-[7]To comply with the individual identity requirement, you have two options:
+[7]To comply with the individual identity requirement, you have two options:[/7]
 []
 [a]We can carry out a remote ID verification of you and your ID documents using a SmartSearch facility. If you would like us to verify your identification remotely please provide your name, address, date of birth, personal email and mobile number. Once the search has been undertaken, SmartSearch will send you a text or email with a link to use on your smartphone which will require you to take a photo of your ID document and then yourself which it will then upload to its system that will check the document, provide us with a copy, and verify that you are the person on the ID document. The process is quick and easy, and avoids you having to send in ID documents to us. Or;
 []
@@ -412,7 +412,6 @@ Yours sincerely,
 {name}
 Solicitor
 """.strip()
-
 
 if st.button("Generate Client Care Letter"):
     app_inputs = {
