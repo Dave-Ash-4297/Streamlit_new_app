@@ -229,14 +229,16 @@ Dear {client_name_input},
 []
 [bold]Timescales[end]
 []
-[5]qu3 Explain the estimated time scales to complete the initial and any ongoing Work. CAPITAL Start capital and end full stop "." [/5]
+[5][qu3 Explain the estimated time scales to complete the initial and any ongoing Work. CAPITAL Start capital and end full stop "." ][/5]
 []
 [bold]Action Required To Be Taken By You[end]
 []
 [underline]Client Identification and Money Laundering[end]
 []
-[indiv][6-1]Solicitors are required by law to obtain evidence of their client’s identity and address to satisfy money laundering and client identification regulations. This includes clients that are corporate entities.[/6-1][end indiv]
-[corp][6-2]Solicitors are required by law to obtain evidence of their client’s identity and address to satisfy money laundering and client identification regulations. This includes clients that are corporate entities.
+[6]Solicitors are required by law to obtain evidence of their client’s identity and address to satisfy money laundering and client identification regulations. This includes clients that are corporate entities.[/6]
+[corp][7]We will make our own enquiries and obtain documentation from Companies House to identify our corporate client. If you believe Companies House’s records to be out of date, please let us know as soon as possible. We may also require documentation or information from the company itself.[/7]
+[8]We are also obliged to identify the individuals at the corporate client who provide us with instructions, which usually means directors of limited companies or members/partners in LLPs, and sometimes we must do the same for “beneficial owners”. Either situation may include you as the recipient of this letter, but may also include other people at the business. We will tell you who else may be required to provide identification.[/8][
+Solicitors are required by law to obtain evidence of their client’s identity and address to satisfy money laundering and client identification regulations. This includes clients that are corporate entities.
 [a]We will make our own enquiries and obtain documentation from Companies House to identify our corporate client. If you believe Companies House’s records to be out of date, please let us know as soon as possible. We may also require documentation or information from the company itself.
 [b]We are also obliged to identify the individuals at the corporate client who provide us with instructions, which usually means directors of limited companies or members/partners in LLPs, and sometimes we must do the same for “beneficial owners”. Either situation may include you as the recipient of this letter, but may also include other people at the business. We will tell you who else may be required to provide identification.[/6-2][end corp]
 []
@@ -440,7 +442,7 @@ if st.button("Generate Client Care Letter"):
     # Set default font for the document body (styles can override this)
     style = doc.styles['Normal']
     font = style.font
-    font.name = 'Arial'
+    font.name = 'HelveticaNeueLT Pro 45 Lt'
     font.size = Pt(11)
     # Ensure paragraphs in 'Normal' style are justified by default
     # Normal style itself usually isn't justified, but we want document default to be.
