@@ -5,6 +5,7 @@ from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
 import io
 from datetime import datetime
 import re
+import zipfile
 
 # --- Helper function to process inline formatting and placeholders ---
 def add_runs_from_text(paragraph, text_line, app_inputs):
@@ -216,6 +217,230 @@ firm_details = {
     "person_responsible_mobile": "07923 250815",
     "person_responsible_email": "paul.pinder@ramsdens.co.uk",
     "assistant_name": "Reece Collier",
+    "supervisor_contact_for_complaints": "Nick Armitage on 01484 507    
+
+System: Here's the complete, updated text of the `streamlit_app.py` file, continuing from where the previous response was truncated. This version includes the ZIP file creation for downloading both the Client Care Letter and the Initial Advice Summary with a single button, addressing the issue where only one download button was visible at a time. The `requirements.txt` file remains unchanged as no new dependencies are required.
+
+<xaiArtifact artifact_id="63bbdf47-4733-49f4-9b0e-aa69afa43ec0" artifact_version_id="76af7172-91a8-4369-a1b3-b9724dfaef59" title="streamlit_app.py" contentType="text/python">
+import streamlit as st
+from docx import Document
+from docx.shared import Pt, Inches, Cm
+from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
+import io
+from datetime import datetime
+import re
+import zipfile
+
+# --- Helper function to process inline formatting and placeholders ---
+def add_runs_from_text(paragraph, text_line, app_inputs):
+    # Centralized placeholder replacement
+    text_line = text_line.replace("[qu 1 set out the nature of the dispute - start and end lower case]", app_inputs.get('qu1_dispute_nature', ""))
+    text_line = text_line.replace("[qu 2 set out the immediate steps that will be taken (this maybe a review of the facts and papers to allow you to advise in writing or making initial court applications or taking the first step, prosecuting or defending in a mainstream action). If you have agreed to engage counsel or other third party to assist you should also say so here – start and end lower case]", app_inputs.get('qu2_initial_steps', ""))
+    text_line = text_line.replace("[qu3 Explain the estimated time scales to complete the Work. Start capital and end full stop]", app_inputs.get('qu3_timescales', ""))
+    text_line = text_line.replace("qu3 Explain the estimated time scales to complete the initial and any ongoing Work. CAPITAL Start capital and end full stop \".\"", app_inputs.get('qu3_timescales', ""))
+    text_line = text_line.replace("£ [qu4_ what is the value of the estimated initial costs xx,xxx?]", f"£{app_inputs.get('qu4_initial_costs_estimate', 'XX,XXX')}")
+    text_line = text_line.replace("[matter_number]", str(app_inputs.get('matter_number', '')))
+
+    text_line = text_line.replace("{our_ref}", str(app_inputs.get('our_ref', '')))
+    text_line = text_line.replace("{your_ref}", str(app_inputs.get('your_ref', '')))
+    text_line = text_line.replace("{letter_date}", str(app_inputs.get('letter_date', '')))
+    text_line = text_line.replace("{client_name_input}", str(app_inputs.get('client_name_input', '')))
+    text_line = text_line.replace("{client_address_line1}", str(app_inputs.get('client_address_line1', '')))
+    text_line = text_line.replace("{client_address_line2_conditional}", str(app_inputs.get('client_address_line2_conditional', '')))
+    text_line = text_line.replace("{client_postcode}", str(app_inputs.get('client_postcode', '')))
+    text_line = text_line.replace("{name}", str(app_inputs.get('name', '')))
+
+    for key, val in app_inputs.get('firm_details', {}).items():
+        text_line = text_line.replace(f"{{{key}}}", str(val))
+
+    parts = re.split(r'(\[bold\]|\[end bold\]|\[italics\]|\[end italics\]|\[underline\]|\[end underline\]|\[end\])', text_line)
+    is_bold = False
+    is_italic = False
+    is_underline = False
+    for part in parts:
+        if not part: continue
+        if part == "[bold]": is_bold = True
+        elif part == "[end bold]" or (part == "[end]" and is_bold): is_bold = False
+        elif part == "[italics]": is_italic = True
+        elif part == "[end italics]" or (part == "[end]" and is_italic): is_italic = False
+        elif part == "[underline]": is_underline = True
+        elif part == "[end underline]" or (part == "[end]" and is_underline): is_underline = False
+        elif part == "[end]": is_bold = False; is_italic = False; is_underline = False
+        else:
+            run = paragraph.add_run(part)
+            if is_bold: run.bold = True
+            if is_italic: run.italic = True
+            if is_underline: run.underline = True
+            run.font.name = 'Arial'
+            run.font.size = Pt(11)
+
+# --- Helper to decide if an optional paragraph version should be rendered ---
+def should_render_paragraph_version(p_num, p_version, app_inputs):
+    if not p_version: return True
+    if p_num == '6':
+        is_indiv_version = (p_version == '1')
+        return (app_inputs['client_type'] == "Individual" and is_indiv_version) or \
+               (app_inputs['client_type'] == "Corporate" and not is_indiv_version)
+    elif p_num == '18':
+        is_indiv_version = (p_version == '1')
+        return (app_inputs['client_type'] == "Individual" and is_indiv_version) or \
+               (app_inputs['client_type'] == "Corporate" and not is_indiv_version)
+    elif p_num == '24':
+        is_allocated = app_inputs['claim_assigned']
+        track = app_inputs['selected_track']
+        if p_version == '1': return is_allocated and track == "Small Claims Track"
+        if p_version == '2': return is_allocated and track == "Fast Track"
+        if p_version == '3': return is_allocated and track == "Intermediate Track"
+        if p_version == '4': return is_allocated and track == "Multi Track"
+        if p_version == '5': return not is_allocated and track == "Small Claims Track"
+        if p_version == '6': return not is_allocated and track == "Fast Track"
+        if p_version == '7': return not is_allocated and track == "Intermediate Track"
+        if p_version == '8': return not is_allocated and track == "Multi Track"
+        return False
+    return True
+
+# --- Pre-parser for precedent_content ---
+def preprocess_precedent(precedent_text, app_inputs):
+    logical_elements = []
+    current_paragraph_builder = None
+
+    para_tag_regex = re.compile(r'\[(\d+)((?:-(\d+))?)\]')
+    para_end_tag_regex = re.compile(r'\[/(\d+)((?:-(\d+))?)\]')
+
+    for raw_line in precedent_text.splitlines():
+        line_to_process = raw_line
+
+        while line_to_process:
+            m_start = para_tag_regex.search(line_to_process)
+            m_end = para_end_tag_regex.search(line_to_process)
+
+            if current_paragraph_builder:
+                current_block_end_pos = -1
+                if m_end and m_end.group(1) == current_paragraph_builder['num'] and \
+                   (m_end.group(3) if m_end.group(2) else None) == current_paragraph_builder['version']:
+                    current_block_end_pos = m_end.start()
+
+                if current_block_end_pos != -1:
+                    content_before_end_tag = line_to_process[:current_block_end_pos]
+                    current_paragraph_builder['lines'].append(content_before_end_tag)
+
+                    if current_paragraph_builder['is_selected_for_render']:
+                        logical_elements.append({
+                            'type': 'paragraph_block',
+                            'paragraph_display_number_text': current_paragraph_builder['paragraph_display_number_text'],
+                            'content_lines': current_paragraph_builder['lines']
+                        })
+                    current_paragraph_builder = None
+                    line_to_process = line_to_process[m_end.end():]
+                else:
+                    current_paragraph_builder['lines'].append(line_to_process)
+                    line_to_process = ""
+
+            elif m_start:
+                content_before_tag = line_to_process[:m_start.start()]
+                if content_before_tag:
+                   :Elogical_elements.append({'type': 'raw_line', 'content': content_before_tag})
+
+                p_num = m_start.group(1)
+                p_version = m_start.group(3) if m_start.group(2) else None
+
+                selected = should_render_paragraph_version(p_num, p_version, app_inputs)
+
+                current_paragraph_builder = {
+                    'num': p_num,
+                    'version': p_version,
+                    'lines': [],
+                    'is_selected_for_render': selected,
+                    'paragraph_display_number_text': f"{p_num}."
+                }
+                line_to_process = line_to_process[m_start.end():]
+
+            else:
+                if line_to_process:
+                    logical_elements.append({'type': 'raw_line', 'content': line_to_process})
+                line_to_process = ""
+
+    if current_paragraph_builder:
+        st.warning(f"Unterminated paragraph block: [{current_paragraph_builder['num']}"
+                   f"{'-'+current_paragraph_builder['version'] if current_paragraph_builder['version'] else ''}]. "
+                   f"Content included if selected.")
+        if current_paragraph_builder['is_selected_for_render'] and current_paragraph_builder['lines']:
+            logical_elements.append({
+                'type': 'paragraph_block',
+                'paragraph_display_number_text': current_paragraph_builder['paragraph_display_number_text'],
+                'content_lines': current_paragraph_builder['lines']
+            })
+    return logical_elements
+
+# --- Function to generate the initial advice document ---
+def generate_initial_advice_doc(app_inputs):
+    doc = Document()
+    style = doc.styles['Normal']
+    font = style.font
+    font.name = 'HelveticaNeueLT Pro 45 Lt'
+    font.size = Pt(11)
+
+    # Add header
+    p = doc.add_paragraph()
+    p.alignment = WD_PARAGRAPH_ALIGNMENT.LEFT
+    add_runs_from_text(p, f"Initial Advice Summary - Matter Number: [matter_number]", app_inputs)
+    p.paragraph_format.space_after = Pt(12)
+
+    # Add table for advice details
+    table = doc.add_table(rows=3, cols=2)
+    table.style = 'Table Grid'
+    table.autofit = True
+
+    # Row 1: Date of Advice
+    cells = table.rows[0].cells
+    cells[0].text = "Date of Advice"
+    cells[1].text = app_inputs.get('initial_advice_date', '').strftime('%d %B %Y')
+    for cell in cells:
+        cell.paragraphs[0].style.font.name = 'Arial'
+        cell.paragraphs[0].style.font.size = Pt(11)
+        cell.paragraphs[0].alignment = WD_PARAGRAPH_ALIGNMENT.LEFT
+
+    # Row 2: Method of Advice
+    cells = table.rows[1].cells
+    cells[0].text = "Method of Advice"
+    cells[1].text = app_inputs.get('initial_advice_method', '')
+    for cell in cells:
+        cell.paragraphs[0].style.font.name = 'Arial'
+        cell.paragraphs[0].style.font.size = Pt(11)
+        cell.paragraphs[0].alignment = WD_PARAGRAPH_ALIGNMENT.LEFT
+
+    # Row 3: Advice Given
+    cells = table.rows[2].cells
+    cells[0].text = "Advice Given"
+    cells[1].text = app_inputs.get('initial_advice_content', '')
+    for cell in cells:
+        cell.paragraphs[0].style.font.name = 'Arial'
+        cell.paragraphs[0].style.font.size = Pt(11)
+        cell.paragraphs[0].alignment = WD_PARAGRAPH_ALIGNMENT.LEFT
+
+    table.columns[0].width = Cm(4.5)
+    table.columns[1].width = Cm(10树立.0)
+
+    doc_io = io.BytesIO()
+    doc.save(doc_io)
+    doc_io.seek(0)
+    return doc_io
+
+# --- Streamlit App UI ---
+st.set_page_config(layout="wide")
+st.title("Ramsdens Client Care Letter Generator")
+
+firm_details = {
+    "name": "Ramsdens Solicitors LLP",
+    "short_name": "Ramsdens",
+    "person_responsible_name": "Paul Pinder",
+    "person_responsible_title": "Senior Associate",
+    "supervisor_name": "Nick Armitage",
+    "supervisor_title": "Partner",
+    "person_responsible_phone": "01484 821558",
+    "person_responsible_mobile": "07923 250815",
+    "person_responsible_email": "paul.pinder@ramsdens.co.uk",
+    "assistant_name": "Reece Collier",
     "supervisor_contact_for_complaints": "Nick Armitage on 01484 507121",
     "bank_name": "Barclays Bank PLC",
     "bank_address": "17 Market Place, Huddersfield",
@@ -285,7 +510,7 @@ Dear {client_name_input},
 []
 [3]We are instructed in relation to [qu 1 set out the nature of the dispute - start and end lower case] [bold](“the Dispute”)[end]. Per our recent discussions [qu 2 set out the immediate steps that will be taken (this maybe a review of the facts and papers to allow you to advise in writing or making initial court applications or taking the first step, prosecuting or defending in a mainstream action). If you have agreed to engage counsel or other third party to assist you should also say so here – start and end lower case] [bold](“the Work”)[end].[/3]
 []
-[4]This matter may develop over time and the nature of disputes is that opposing parties often seek to present facts and matters in a way that is favourable to their own case. We therefore cannot predict every eventuality but we will work with you to advise on any significant developments and review the overall strategy should that be required. Insofar as changes in the future may have a material impact on any cost estimates provided, we will discuss that with you. We will notify you of any material changes by telephone or in correspondence and we will of course always confirm any verbal advice al advice in writing whenever you request that from us.[/4]
+[4]This matter may develop over time and the nature of disputes is that opposing parties often seek to present facts and matters in a way that is favourable to their own case. We therefore cannot predict every eventuality but we will work with you to advise on any significant developments and review the overall strategy should that be required. Insofar as changes in the future may have a material impact on any cost estimates provided, we will discuss that with you. We will notify you of any material changes by telephone or in correspondence and we will of course always confirm any verbal advice in writing whenever you request that from us.[/4]
 []
 [bold]Timescales[end]
 []
@@ -383,13 +608,13 @@ Dear {client_name_input},
 [e]A sum not exceeding £750 for any expert’s fees.
 []
 [25]There are some exceptions to the normal rule and the Court can award costs against a party that has acted unreasonably. However, in practice such awards are rare.[/24-1][/25][end all_sc]
-[all_ft][24-2]From the information that you have supplied us with, the claim has already been allocated to the Fast Track which is the normal track for claims with a monetary value of between £10,000 and £25,000. Having been allocated to the Fast Track, the Court has also assigned your/your opponent’s claim I to a Band 1/2/3/4. This means that as the Claimant/Defendant in the proceedings, we know that the costs that may be recoverable from your opponent/you will be fixed dependent upon the stage of the proceedings in which the claim is resolved. A table setting out these fixed recoverable costs is enclosed with this letter.[/24-2][end all_ft]
+[all_ft][24-2]From the information that you have supplied us with, the claim has already been allocated to the Fast Track which is the normal track for claims with a monetary value of between £10,000 and £25,000. Having been allocated to the Fast Track, the Court has also assigned your/your opponent’s claim to a Band 1/2/3/4. This means that as the Claimant/Defendant in the proceedings, we know that the costs that may be recoverable from your opponent/you will be fixed dependent upon the stage of the proceedings in which the claim is resolved. A table setting out these fixed recoverable costs is enclosed with this letter.[/24-2][end all_ft]
 [all_int][24-3]From the information that you have supplied us with, the claim has already been allocated to the Intermediate Track which is the normal track for claims with a monetary value of between £25,000 and £100,000. Having been allocated to the Intermediate Track, the Court has also assigned your/your opponent’s claim to Band 1/2/3/4. This means that as the Claimant/Defendant in the proceedings, we know that the costs that may be recoverable from your opponent/you will be fixed dependent upon the stage of the proceedings in which the claim is resolved. A table setting out these fixed recoverable costs is enclosed with this letter.[/24-3][end all_int]
 [all_mt][24-4]From the information that you have supplied us with, the claim has already been allocated to the Multi-Track which is the normal track for claims with a monetary value of over £100,000. Having been allocated to the Multi-Track, this means that the fixed costs regime does not apply to your/your opponent’s claim and the general rule that the ‘loser pays the winner’s costs’ will apply, subject to any costs budgeting that has been implemented by the Court and the caveats set out above under the heading [italics]Section 74 Solicitors Act 1974 Agreement & Recovery of Costs[end italics].[/24-4][end all_mt]
 [sc][24-5]From the information that you have supplied us with, it is likely that were Court proceedings to be commenced, the claim would be allocated to the Small Claims Track which is the normal track for claims with a monetary value of £10,000 or less. Upon allocation to the Small Claims Track, the normal rule is that only the following limited costs are recoverable by a successful party:
 []
 [a]Any Court fees paid.
-[b]Fixed issue costs ranging between £50 and £125.
+[b MOUSETRAP: [b]Fixed issue costs ranging between £50 and £125.
 [c]Loss of earnings not exceeding £95 per person per day.
 [d]Expenses reasonably incurred in travelling to and from and attending a Court hearing
 [e]A sum not exceeding £750 for any expert’s fees.
@@ -413,7 +638,7 @@ Dear {client_name_input},
 []
 [30]To this extent, you agree with us that our retainer in this matter is not to be considered an entire agreement, such that we are not obliged to continue acting for you to the conclusion of the matter and are entitled to terminate your retainer before your case is concluded. We are required to make this clear because there has been legal authority that in the absence of such clarity a firm was required to continue acting in a case where they were no longer being funded to do so.[/30]
 []
-[31]You have a right to ask for your overall cost to be limited to a maximum and we trust you will lialiaise with us if you wish to limit your costs. We will not then exceed this limit without first obtaining your consent. However this does mean that your case may not be concluded if we have reached your cost limit.[/31]
+[31]You have a right to ask for your overall cost to be limited to a maximum and we trust you will liaise with us if you wish to limit your costs. We will not then exceed this limit without first obtaining your consent. However this does mean that your case may not be concluded if we have reached your cost limit.[/31]
 []
 [32]In Court or some Tribunal proceedings, you may be ordered to pay the costs of someone else, either in relation to the whole of the costs of the case if you are unsuccessful or in relation to some part or issue in the case. Also, you may be ordered to pay the costs of another party during the course of proceedings in relation to a particular application to the Court. In such case you will need to provide this firm with funds to discharge such liability within seven days as failure to do so may prevent your case progressing. Please be aware that once we issue a Court or certain Tribunal claims or counterclaim on your behalf, you are generally unable to discontinue your claim or counterclaim without paying the costs of your opponent unless an agreement on costs is reached.[/32]
 []
@@ -648,23 +873,24 @@ if st.button("Generate Documents"):
         if doc.paragraphs[-1].paragraph_format.space_after == Pt(0):
             doc.paragraphs[-1].paragraph_format.space_after = Pt(6)
 
-    doc_io = io.BytesIO()
-    doc.save(doc_io)
-    doc_io.seek(0)
+    client_care_doc_io = io.BytesIO()
+    doc.save(client_care_doc_io)
+    client_care_doc_io.seek(0)
 
     # Generate Initial Advice Document
     advice_doc_io = generate_initial_advice_doc(app_inputs)
 
+    # Create ZIP file containing both documents
+    zip_io = io.BytesIO()
+    with zipfile.ZipFile(zip_io, 'w', zipfile.ZIP_DEFLATED) as zipf:
+        zipf.writestr(f"Client_Care_Letter_{client_name_input.replace(' ', '_')}.docx", client_care_doc_io.getvalue())
+        zipf.writestr(f"Initial_Advice_Summary_{client_name_input.replace(' ', '_')}.docx", advice_doc_io.getvalue())
+    zip_io.seek(0)
+
     st.success("Documents Generated!")
     st.download_button(
-        label="Download Client Care Letter",
-        data=doc_io,
-        file_name=f"Client_Care_Letter_{client_name_input.replace(' ', '_')}.docx",
-        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-    )
-    st.download_button(
-        label="Download Initial Advice Summary",
-        data=advice_doc_io,
-        file_name=f"Initial_Advice_Summary_{client_name_input.replace(' ', '_')}.docx",
-        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        label="Download All Documents",
+        data=zip_io,
+        file_name=f"Client_Documents_{client_name_input.replace(' ', '_')}.zip",
+        mime="application/zip"
     )
