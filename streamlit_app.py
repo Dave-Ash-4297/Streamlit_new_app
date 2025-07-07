@@ -1,8 +1,7 @@
 import streamlit as st
 from docx import Document
-from docx.shared import Pt, Inches, Cm # Ensure Cm is imported
+from docx.shared import Pt, Inches, Cm
 from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
-# from docx.enum.style import WD_STYLE_TYPE # For custom styles if needed
 import io
 from datetime import datetime
 import re
@@ -15,6 +14,7 @@ def add_runs_from_text(paragraph, text_line, app_inputs):
     text_line = text_line.replace("[qu3 Explain the estimated time scales to complete the Work. Start capital and end full stop]", app_inputs.get('qu3_timescales', ""))
     text_line = text_line.replace("qu3 Explain the estimated time scales to complete the initial and any ongoing Work. CAPITAL Start capital and end full stop \".\"", app_inputs.get('qu3_timescales', ""))
     text_line = text_line.replace("£ [qu4_ what is the value of the estimated initial costs xx,xxx?]", f"£{app_inputs.get('qu4_initial_costs_estimate', 'XX,XXX')}")
+    text_line = text_line.replace("[matter_number]", str(app_inputs.get('matter_number', '')))
 
     text_line = text_line.replace("{our_ref}", str(app_inputs.get('our_ref', '')))
     text_line = text_line.replace("{your_ref}", str(app_inputs.get('your_ref', '')))
@@ -46,8 +46,8 @@ def add_runs_from_text(paragraph, text_line, app_inputs):
             if is_bold: run.bold = True
             if is_italic: run.italic = True
             if is_underline: run.underline = True
-            run.font.name = 'Arial' # Keep this for run-level styling
-            run.font.size = Pt(11) # Keep this for run-level styling
+            run.font.name = 'Arial'
+            run.font.size = Pt(11)
 
 # --- Helper to decide if an optional paragraph version should be rendered ---
 def should_render_paragraph_version(p_num, p_version, app_inputs):
@@ -102,7 +102,7 @@ def preprocess_precedent(precedent_text, app_inputs):
                     if current_paragraph_builder['is_selected_for_render']:
                         logical_elements.append({
                             'type': 'paragraph_block',
-                            'paragraph_display_number_text': current_paragraph_builder['paragraph_display_number_text'], # Still useful to identify type
+                            'paragraph_display_number_text': current_paragraph_builder['paragraph_display_number_text'],
                             'content_lines': current_paragraph_builder['lines']
                         })
                     current_paragraph_builder = None
@@ -126,7 +126,7 @@ def preprocess_precedent(precedent_text, app_inputs):
                     'version': p_version,
                     'lines': [],
                     'is_selected_for_render': selected,
-                    'paragraph_display_number_text': f"{p_num}." # Keep for identification
+                    'paragraph_display_number_text': f"{p_num}."
                 }
                 line_to_process = line_to_process[m_start.end():]
 
@@ -146,6 +146,60 @@ def preprocess_precedent(precedent_text, app_inputs):
                 'content_lines': current_paragraph_builder['lines']
             })
     return logical_elements
+
+# --- Function to generate the initial advice document ---
+def generate_initial_advice_doc(app_inputs):
+    doc = Document()
+    style = doc.styles['Normal']
+    font = style.font
+    font.name = 'HelveticaNeueLT Pro 45 Lt'
+    font.size = Pt(11)
+
+    # Add header
+    p = doc.add_paragraph()
+    p.alignment = WD_PARAGRAPH_ALIGNMENT.LEFT
+    add_runs_from_text(p, f"Initial Advice Summary - Matter Number: [matter_number]", app_inputs)
+    p.paragraph_format.space_after = Pt(12)
+
+    # Add table for advice details
+    table = doc.add_table(rows=3, cols=2)
+    table.style = 'Table Grid'
+    table.autofit = True
+
+    # Row 1: Date of Advice
+    cells = table.rows[0].cells
+    cells[0].text = "Date of Advice"
+    cells[1].text = app_inputs.get('initial_advice_date', '').strftime('%d %B %Y')
+    for cell in cells:
+        cell.paragraphs[0].style.font.name = 'Arial'
+        cell.paragraphs[0].style.font.size = Pt(11)
+        cell.paragraphs[0].alignment = WD_PARAGRAPH_ALIGNMENT.LEFT
+
+    # Row 2: Method of Advice
+    cells = table.rows[1].cells
+    cells[0].text = "Method of Advice"
+    cells[1].text = app_inputs.get('initial_advice_method', '')
+    for cell in cells:
+        cell.paragraphs[0].style.font.name = 'Arial'
+        cell.paragraphs[0].style.font.size = Pt(11)
+        cell.paragraphs[0].alignment = WD_PARAGRAPH_ALIGNMENT.LEFT
+
+    # Row 3: Advice Given
+    cells = table.rows[2].cells
+    cells[0].text = "Advice Given"
+    cells[1].text = app_inputs.get('initial_advice_content', '')
+    for cell in cells:
+        cell.paragraphs[0].style.font.name = 'Arial'
+        cell.paragraphs[0].style.font.size = Pt(11)
+        cell.paragraphs[0].alignment = WD_PARAGRAPH_ALIGNMENT.LEFT
+
+    table.columns[0].width = Cm(4.5)
+    table.columns[1].width = Cm(10.0)
+
+    doc_io = io.BytesIO()
+    doc.save(doc_io)
+    doc_io.seek(0)
+    return doc_io
 
 # --- Streamlit App UI ---
 st.set_page_config(layout="wide")
@@ -176,6 +230,7 @@ st.sidebar.header("Letter Details")
 our_ref = st.sidebar.text_input("Our Reference", "PP/LEGAL/RAM001/001")
 your_ref = st.sidebar.text_input("Your Reference (if any)", "")
 letter_date = st.sidebar.date_input("Letter Date", datetime.today())
+matter_number = st.sidebar.text_input("Matter Number", "RAM001/001")
 
 st.sidebar.header("Client Information")
 client_name_input = st.sidebar.text_input("Client Full Name / Company Name", "Mr. John Smith")
@@ -184,12 +239,16 @@ client_address_line2 = st.sidebar.text_input("Client Address Line 2", "SomeTown"
 client_postcode = st.sidebar.text_input("Client Postcode", "EX4 MPL")
 client_type = st.sidebar.radio("Client Type:", ("Individual", "Corporate"), key="client_type_radio")
 
+st.sidebar.header("Initial Advice Details")
+initial_advice_content = st.sidebar.text_area("Initial Advice Given", "Advised on the merits of the claim and potential next steps.", height=100)
+initial_advice_method = st.sidebar.selectbox("Method of Initial Advice", ["Phone Call", "In Person", "Teams Call"], key="advice_method_select")
+initial_advice_date = st.sidebar.date_input("Date of Initial Advice", datetime.today())
+
 st.sidebar.header("Case Details")
 claim_assigned_input = st.sidebar.radio("Is the claim already assigned to a court track?",
                                    ("Yes", "No"), key="claim_assigned_radio")
 track_options = ["Small Claims Track", "Fast Track", "Intermediate Track", "Multi Track"]
 selected_track = st.sidebar.selectbox("Which court track applies or is anticipated?", track_options, key="track_select")
-
 
 st.header("Dynamic Content (Answers to Questions)")
 qu1_dispute_nature = st.text_area("Q1: Nature of the Dispute (for 'the Dispute')",
@@ -204,10 +263,11 @@ fee_table_content = st.text_area("Fee Table Content (to be inserted in 'Costs an
                                  "Partner: £XXX per hour\nSenior Associate: £YYY per hour\nSolicitor: £ZZZ per hour\nParalegal: £AAA per hour",
                                  height=150)
 
-# --- Precedent Text (Your existing precedent_content string) ---
+# --- Updated Precedent Text with matter_number placeholder ---
 precedent_content = """
 Our Ref: {our_ref}
 Your Ref: {your_ref}
+Matter Number: [matter_number]
 Date: {letter_date}
 []
 {client_name_input}
@@ -217,7 +277,7 @@ Date: {letter_date}
 []
 Dear {client_name_input},
 []
-[1]Further to our recent discussions, we now write to confirm the terms under which Ramsdens Solicitors LLP [bold](“Ramsdens”)[end] will act for you. As a firm that is regulated by the Solicitors Regulation Authority, we are required to send you this letter which contains specific and prescribed information.[/1]
+[1]Further to our recent discussions, we now write to confirm the terms under which Ramsdens Solicitors LLP [bold](“Ramsdens”)[end] will act for you in relation to matter number [matter_number]. As a firm that is regulated by the Solicitors Regulation Authority, we are required to send you this letter which contains specific and prescribed information.[/1]
 []
 [2]We enclose with this letter our Terms and Conditions of Business which must be read in conjunction with this letter. These documents are a formal communication and the language used is reflective of that. We hope that you understand. Please take the time to read these documents carefully. Where there is any conflict between this letter and our Terms and Conditions of Business, the terms of this letter will prevail. Your continuing instructions in this matter will amount to your acceptance of our Terms and Conditions of Business.[/2]
 []
@@ -225,7 +285,7 @@ Dear {client_name_input},
 []
 [3]We are instructed in relation to [qu 1 set out the nature of the dispute - start and end lower case] [bold](“the Dispute”)[end]. Per our recent discussions [qu 2 set out the immediate steps that will be taken (this maybe a review of the facts and papers to allow you to advise in writing or making initial court applications or taking the first step, prosecuting or defending in a mainstream action). If you have agreed to engage counsel or other third party to assist you should also say so here – start and end lower case] [bold](“the Work”)[end].[/3]
 []
-[4]This matter may develop over time and the nature of disputes is that opposing parties often seek to present facts and matters in a way that is favourable to their own case. We therefore cannot predict every eventuality but we will work with you to advise on any significant developments and review the overall strategy should that be required. Insofar as changes in the future may have a material impact on any cost estimates provided, we will discuss that with you. We will notify you of any material changes by telephone or in correspondence and we will of course always confirm any verbal advice in writing whenever you request that from us.[/4]
+[4]This matter may develop over time and the nature of disputes is that opposing parties often seek to present facts and matters in a way that is favourable to their own case. We therefore cannot predict every eventuality but we will work with you to advise on any significant developments and review the overall strategy should that be required. Insofar as changes in the future may have a material impact on any cost estimates provided, we will discuss that with you. We will notify you of any material changes by telephone or in correspondence and we will of course always confirm any verbal advice al advice in writing whenever you request that from us.[/4]
 []
 [bold]Timescales[end]
 []
@@ -323,7 +383,7 @@ Dear {client_name_input},
 [e]A sum not exceeding £750 for any expert’s fees.
 []
 [25]There are some exceptions to the normal rule and the Court can award costs against a party that has acted unreasonably. However, in practice such awards are rare.[/24-1][/25][end all_sc]
-[all_ft][24-2]From the information that you have supplied us with, the claim has already been allocated to the Fast Track which is the normal track for claims with a monetary value of between £10,000 and £25,000. Having been allocated to the Fast Track, the Court has also assigned your/your opponent’s claim to a Band 1/2/3/4. This means that as the Claimant/Defendant in the proceedings, we know that the costs that may be recoverable from your opponent/you will be fixed dependent upon the stage of the proceedings in which the claim is resolved. A table setting out these fixed recoverable costs is enclosed with this letter.[/24-2][end all_ft]
+[all_ft][24-2]From the information that you have supplied us with, the claim has already been allocated to the Fast Track which is the normal track for claims with a monetary value of between £10,000 and £25,000. Having been allocated to the Fast Track, the Court has also assigned your/your opponent’s claim I to a Band 1/2/3/4. This means that as the Claimant/Defendant in the proceedings, we know that the costs that may be recoverable from your opponent/you will be fixed dependent upon the stage of the proceedings in which the claim is resolved. A table setting out these fixed recoverable costs is enclosed with this letter.[/24-2][end all_ft]
 [all_int][24-3]From the information that you have supplied us with, the claim has already been allocated to the Intermediate Track which is the normal track for claims with a monetary value of between £25,000 and £100,000. Having been allocated to the Intermediate Track, the Court has also assigned your/your opponent’s claim to Band 1/2/3/4. This means that as the Claimant/Defendant in the proceedings, we know that the costs that may be recoverable from your opponent/you will be fixed dependent upon the stage of the proceedings in which the claim is resolved. A table setting out these fixed recoverable costs is enclosed with this letter.[/24-3][end all_int]
 [all_mt][24-4]From the information that you have supplied us with, the claim has already been allocated to the Multi-Track which is the normal track for claims with a monetary value of over £100,000. Having been allocated to the Multi-Track, this means that the fixed costs regime does not apply to your/your opponent’s claim and the general rule that the ‘loser pays the winner’s costs’ will apply, subject to any costs budgeting that has been implemented by the Court and the caveats set out above under the heading [italics]Section 74 Solicitors Act 1974 Agreement & Recovery of Costs[end italics].[/24-4][end all_mt]
 [sc][24-5]From the information that you have supplied us with, it is likely that were Court proceedings to be commenced, the claim would be allocated to the Small Claims Track which is the normal track for claims with a monetary value of £10,000 or less. Upon allocation to the Small Claims Track, the normal rule is that only the following limited costs are recoverable by a successful party:
@@ -336,7 +396,7 @@ Dear {client_name_input},
 []
 [25]There are some exceptions to the normal rule and the Court can award costs against a party that has acted unreasonably. However, in practice such awards are rare.[/24-5][/25][end sc]
 [ft][24-6]From the information that you have supplied us with, it is likely that were Court proceedings to be commenced, the claim would be allocated to the Fast Track which is the normal track for claims with a monetary value of between £10,000 and £25,000. Upon allocation to the Fast Track, the Court will assign your/your opponent’s claim to one of four ‘bands’ depending upon the complexity and number of issues in the claim. When the claim is assigned, as the Claimant/Defendant in the proceedings, we will know that the costs that may be recoverable from your opponent/you will be fixed dependent upon the stage of the proceedings in which the claim is resolved. A table setting out these fixed recoverable costs is enclosed with this letter.[/24-6][end ft]
-[int][24-7]From the information that you have supplied us with, it is likely that were Court proceedings to be commenced, the claim would be allocated to the Intermediate Track which is the normal track for claims with a monetary value of between £25,000 and £100,000. Upon allocation to the Intermediate Track, the Court will assign your/your opponent’s claim to one of four ‘bands’ depending upon the complexity and number of issues in the claim. When the claim is assigned, as the Claimant/Defendant in the proceedings, we will know that the costs that may be recoverable from your opponent/you will be fixed dependent upon the stage of the proceedings inịch the claim is resolved. A table setting out these fixed recoverable costs is enclosed with this letter.[/24-7][end int]
+[int][24-7]From the information that you have supplied us with, it is likely that were Court proceedings to be commenced, the claim would be allocated to the Intermediate Track which is the normal track for claims with a monetary value of between £25,000 and £100,000. Upon allocation to the Intermediate Track, the Court will assign your/your opponent’s claim to one of four ‘bands’ depending upon the complexity and number of issues in the claim. When the claim is assigned, as the Claimant/Defendant in the proceedings, we will know that the costs that may be recoverable from your opponent/you will be fixed dependent upon the stage of the proceedings in which the claim is resolved. A table setting out these fixed recoverable costs is enclosed with this letter.[/24-7][end int]
 [mt][24-8]From the information that you have supplied us with, it is likely that were Court proceedings to be commenced, the claim would be allocated to the Multi-Track which is the normal track for claims with a monetary value of in excess of £100,000. Upon allocation to the Multi-Track, the fixed costs regime will not apply to your/your opponent’s claim and the general rule that the ‘loser pays the winner’s costs’ will apply, subject to any costs budgeting that has been implemented by the Court and the caveats set out above under the heading [italics]Section 74 Solicitors Act 1974 Agreement & Recovery of Costs[end italics].[/24-8][end mt]
 []
 [underline]Costs Advice[end]
@@ -413,7 +473,7 @@ Yours sincerely,
 Solicitor
 """.strip()
 
-if st.button("Generate Client Care Letter"):
+if st.button("Generate Documents"):
     app_inputs = {
         'qu1_dispute_nature': qu1_dispute_nature,
         'qu2_initial_steps': qu2_initial_steps,
@@ -431,19 +491,19 @@ if st.button("Generate Client Care Letter"):
         'client_address_line2_conditional': client_address_line2 if client_address_line2 else "",
         'client_postcode': client_postcode,
         'name': firm_details["person_responsible_name"],
+        'matter_number': matter_number,
+        'initial_advice_content': initial_advice_content,
+        'initial_advice_method': initial_advice_method,
+        'initial_advice_date': initial_advice_date,
         'firm_details': firm_details
     }
 
+    # Generate Client Care Letter
     doc = Document()
-    # Set default font for the document body (styles can override this)
     style = doc.styles['Normal']
     font = style.font
     font.name = 'HelveticaNeueLT Pro 45 Lt'
     font.size = Pt(11)
-    # Ensure paragraphs in 'Normal' style are justified by default
-    # Normal style itself usually isn't justified, but we want document default to be.
-    # However, it's better to set justification on a per-paragraph basis or on specific styles.
-    # For now, we'll set it per paragraph.
 
     logical_document_elements = preprocess_precedent(precedent_content, app_inputs)
 
@@ -456,30 +516,24 @@ if st.button("Generate Client Care Letter"):
         if element['type'] == 'raw_line':
             lines_to_process_for_docx.append({'text': element['content'], 'is_numbered_block_line': False})
         elif element['type'] == 'paragraph_block':
-            # para_num_text = element['paragraph_display_number_text'] # We won't use this to prefix text
             first_content_line_of_block = True
             for internal_line in element['content_lines']:
                 line_text_to_add = internal_line
                 is_this_first_numbered = False
                 if first_content_line_of_block and internal_line.strip():
-                    # Don't add the number prefix; Word will handle it via style
                     line_text_to_add = internal_line.lstrip()
                     is_this_first_numbered = True
                     first_content_line_of_block = False
                 lines_to_process_for_docx.append({'text': line_text_to_add, 'is_numbered_block_line': is_this_first_numbered})
-
 
     # Constants for indentation
     INDENT_FOR_IND_TAG_CM = 1.25
     SUB_LETTER_HANGING_OFFSET_CM = 0.50
     SUB_LETTER_TEXT_INDENT_NO_IND_CM = 1.25
 
-
     for line_item in lines_to_process_for_docx:
         line_for_docx_processing_raw = line_item['text']
-        # Renamed for clarity: this flag now means "this is the first line of a [1] type block"
         is_main_numbered_paragraph = line_item['is_numbered_block_line']
-
 
         stripped_content_for_condition_check = line_for_docx_processing_raw.strip()
         if stripped_content_for_condition_check == "[indiv]": in_indiv_block = True; continue
@@ -530,16 +584,13 @@ if st.button("Generate Client Care Letter"):
             continue
 
         text_content_for_runs = line_for_docx_processing
-        current_paragraph_style_name = 'Normal' # Default style
+        current_paragraph_style_name = 'Normal'
         space_after_val_pt = Pt(0)
         current_format_type = "normal"
 
-        # Determine format type based on tags
         if is_main_numbered_paragraph:
-            # This is a paragraph like [1], [2], etc.
-            # Word will handle numbering and its basic indent via the 'List Number' style.
             current_paragraph_style_name = 'List Number'
-            current_format_type = "main_numbered_auto" # New type
+            current_format_type = "main_numbered_auto"
         else:
             original_line_had_ind_tag = text_content_for_runs.startswith("[ind]")
             if original_line_had_ind_tag:
@@ -550,34 +601,24 @@ if st.button("Generate Client Care Letter"):
             if sub_letter_match:
                 letter = sub_letter_match.group(1)
                 rest_of_text = sub_letter_match.group(2).lstrip()
-                text_content_for_runs = f"({letter.lower()})\t{rest_of_text}" # Manual sub-letter with tab
+                text_content_for_runs = f"({letter.lower()})\t{rest_of_text}"
                 current_format_type = "sub_letter"
             elif text_content_for_runs.startswith("[bp]"):
-                current_paragraph_style_name = 'ListBullet' # Use Word's bullet style
+                current_paragraph_style_name = 'ListBullet'
                 text_content_for_runs = text_content_for_runs.replace("[bp]", "", 1).lstrip()
                 space_after_val_pt = Pt(6)
                 current_format_type = "ind_bullet" if original_line_had_ind_tag else "bullet_auto"
 
-
         if not text_content_for_runs.strip() and not (current_paragraph_style_name in ['ListBullet', 'List Number'] and not text_content_for_runs):
-            # Allow empty bullet/list items if style is applied, Word handles this
             if current_paragraph_style_name == 'Normal':
                 continue
 
-
-        p = doc.add_paragraph(style=current_paragraph_style_name) # Apply style here
+        p = doc.add_paragraph(style=current_paragraph_style_name)
         pf = p.paragraph_format
-        # Global rule: all paragraphs are justified unless a style strongly overrides it to left/center.
-        # 'List Number' and 'ListBullet' might default to left, so we override here if justify is always wanted.
         pf.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
         pf.tab_stops.clear_all()
 
-
         if current_format_type == "main_numbered_auto":
-            # Indentation and numbering are handled by the 'List Number' style.
-            # No explicit indentation needed here normally.
-            # Font of the number itself comes from 'List Number' style.
-            # Font of the text comes from `add_runs_from_text`.
             pass
         elif current_format_type == "sub_letter":
             if original_line_had_ind_tag:
@@ -589,42 +630,41 @@ if st.button("Generate Client Care Letter"):
                 pf.left_indent = Cm(SUB_LETTER_TEXT_INDENT_NO_IND_CM)
                 pf.first_line_indent = Cm(-SUB_LETTER_HANGING_OFFSET_CM)
                 pf.tab_stops.add_tab_stop(Cm(SUB_LETTER_TEXT_INDENT_NO_IND_CM))
-        elif current_format_type == "bullet_auto": # [bp] without [ind]
-            # Indentation and bullet are handled by 'ListBullet' style.
+        elif current_format_type == "bullet_auto":
             pass
-        elif current_format_type == "ind_bullet": # [ind][bp]
+        elif current_format_type == "ind_bullet":
             pf.left_indent = Cm(INDENT_FOR_IND_TAG_CM)
-            # 'ListBullet' style's own indentations will apply relative to this.
-        elif current_format_type == "ind_block_only": # [ind] Text
+        elif current_format_type == "ind_block_only":
             pf.left_indent = Cm(INDENT_FOR_IND_TAG_CM)
             pf.first_line_indent = Cm(0)
             pf.tab_stops.add_tab_stop(Cm(INDENT_FOR_IND_TAG_CM))
-        elif current_format_type == "normal": # Plain text line
-             # No specific indents unless it's a 'Normal' style paragraph that needs something special
-             # pf.left_indent = Cm(0) # Default, already set
-             pass
-
+        elif current_format_type == "normal":
+            pass
 
         pf.space_after = space_after_val_pt
         add_runs_from_text(p, text_content_for_runs, app_inputs)
 
-        # The `add_runs_from_text` sets Arial 11pt on runs.
-        # If the paragraph style (like 'List Number' or 'ListBullet')
-        # has a different font, Word's behavior for run vs. paragraph style font can be complex.
-        # Generally, explicit run formatting wins.
-
     if doc.paragraphs:
         if doc.paragraphs[-1].paragraph_format.space_after == Pt(0):
-             doc.paragraphs[-1].paragraph_format.space_after = Pt(6)
+            doc.paragraphs[-1].paragraph_format.space_after = Pt(6)
 
     doc_io = io.BytesIO()
     doc.save(doc_io)
     doc_io.seek(0)
 
-    st.success("Client Care Letter Generated!")
+    # Generate Initial Advice Document
+    advice_doc_io = generate_initial_advice_doc(app_inputs)
+
+    st.success("Documents Generated!")
     st.download_button(
-        label="Download Word Document",
+        label="Download Client Care Letter",
         data=doc_io,
         file_name=f"Client_Care_Letter_{client_name_input.replace(' ', '_')}.docx",
+        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+    st.download_button(
+        label="Download Initial Advice Summary",
+        data=advice_doc_io,
+        file_name=f"Initial_Advice_Summary_{client_name_input.replace(' ', '_')}.docx",
         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     )
