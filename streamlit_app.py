@@ -365,7 +365,7 @@ if submitted:
 
         # More specific regex to avoid conflicts with formatting tags like [bd]
         list_match_letter = re.match(r'^\[([a-zA-Z])\]\s(.*)', text_content)
-        list_match_roman = re.match(r'^\[(i{1,3}|iv)\]\s(.*)', text_content)
+        list_match_roman = re.match(r'^\[(i{1,3}|iv|v|vi|vii)\]\s(.*)', text_content)
 
         if text_content.startswith("[#]"):
             p.style = 'List Number'
