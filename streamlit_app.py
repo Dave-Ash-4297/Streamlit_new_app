@@ -179,17 +179,31 @@ with st.form("input_form"):
     selected_track = st.selectbox("Which court track applies or is anticipated?", track_options)
 
     st.header("Dynamic Content")
-    qu1_dispute_nature = st.text_area('We are instructed in relation to [your text below is inserted here - define the dispute] (the "Dispute").', "a contractual matter related to services provided", height=75)
-    qu2_initial_steps = st.text_area('Per our recent discussions [when you came in to the office, or when we spoke on the phone, it was agreed that we would HERE YOU NEED TO SET OUT WHAT INITIAL WORK YOU AGREED TO DO] (the "Work")', "review the documentation you have provided and advise you on the merits of your position and potential next steps. we will also prepare an initial letter to the other side", height=150)
-    qu3_timescales = st.text_area("Q3: Estimated Timescales", "We estimate that the initial Work will take approximately 2-4 weeks to complete, depending on the complexity and responsiveness of other parties. We will keep you updated on progress.", height=100)
-    qu4_initial_costs_estimate = st.text_input("Q4: Estimated Initial Costs (e.g., 1,500)", "1,500")
+    qu1_dispute_nature = st.text_area('We are instructed in relation to [your text below is inserted here - define the dispute] (the "Dispute").', "a contractual matter where you wish to bring a claim against your landlord", height=75)
+    qu2_initial_steps = st.text_area('Per our recent discussions [when you came in to the office, or when we spoke on the phone, it was agreed that we would HERE YOU NEED TO SET OUT WHAT INITIAL WORK YOU AGREED TO DO] (the "Work").', "review the documentation you have provided and advise you on the merits of your case and set out the next steps", height=150)
+    qu3_timescales = st.text_area("Q3: Estimated Timescales", "We estimate that to complete the initial advice for you we will take approximately two to fourt weeks to complete. Obviously, where other parties are involved this will depend on the complexity of the matter and the responsiveness of other parties. We will keep you updated on progress.", height=100)
+    st.subheader("Q4: Estimated Initial Costs")
+    lower_cost_estimate = st.number_input("Lower estimate (£)", value=1500, step=100)
+    upper_cost_estimate = st.number_input("Upper estimate (£)", value=2000, step=100)
 
     submitted = st.form_submit_button("Generate Documents")
 
 if submitted:
+    vat_rate = 0.20
+    lower_cost_vat = lower_cost_estimate * vat_rate
+    upper_cost_vat = upper_cost_estimate * vat_rate
+    lower_cost_total = lower_cost_estimate + lower_cost_vat
+    upper_cost_total = upper_cost_estimate + upper_cost_vat
+
+    costs_text = (
+        f"£{lower_cost_estimate:,.2f} to £{upper_cost_estimate:,.2f} plus VAT "
+        f"(currently standing at 20% but subject to change by the government) "
+        f"which at the current rate would be £{lower_cost_total:,.2f} to £{upper_cost_total:,.2f} with VAT included."
+    )
+
     app_inputs = {
         'qu1_dispute_nature': qu1_dispute_nature, 'qu2_initial_steps': qu2_initial_steps,
-        'qu3_timescales': qu3_timescales, 'qu4_initial_costs_estimate': qu4_initial_costs_estimate,
+        'qu3_timescales': qu3_timescales, 'qu4_initial_costs_estimate': costs_text,
         'client_type': client_type,
         'claim_assigned': claim_assigned_input == "Yes", 'selected_track': selected_track,
         'our_ref': our_ref, 'your_ref': your_ref, 'letter_date': letter_date.strftime('%d %B %Y'),
