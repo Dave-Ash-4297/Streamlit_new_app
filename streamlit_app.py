@@ -247,11 +247,11 @@ with st.form("input_form"):
     if cost_type_is_range:
         col1, col2 = st.columns(2)
         with col1:
-            lower_cost_estimate = st.number_input("Lower estimate (£)", value=1500, step=cost_step)
+            lower_cost_estimate = st.number_input("Lower estimate (£)", value=1500.0, step=float(cost_step))
         with col2:
-            upper_cost_estimate = st.number_input("Upper estimate (£)", value=2000, step=cost_step)
+            upper_cost_estimate = st.number_input("Upper estimate (£)", value=2000.0, step=float(cost_step))
     else:
-        fixed_cost_estimate = st.number_input("Fixed cost estimate (£)", value=1750, step=cost_step)
+        fixed_cost_estimate = st.number_input("Fixed cost estimate (£)", value=1750.0, step=float(cost_step))
 
     submitted = st.form_submit_button("Generate Documents")
 
