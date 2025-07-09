@@ -10,7 +10,8 @@ import zipfile
 # --- Constants ---
 INDENT_FOR_IND_TAG_CM = 1.25
 SUB_LETTER_HANGING_OFFSET_CM = 0.50
-SUB_LETTER_TEXT_INDENT_NO_IND_CM = 1.25
+SUB_LETTER_TEXT_INDENT_NO_IND_CM = 0.7  # Updated indent for lettered lists
+SUB_ROMAN_TEXT_INDENT_CM = 1.4  # Indent for Roman numeral lists
 NESTED_BULLET_INDENT_CM = INDENT_FOR_IND_TAG_CM + 0.5
 
 # --- Cached Data Loading ---
@@ -75,15 +76,15 @@ def get_placeholder_map(app_inputs, firm_details):
 def add_formatted_runs(paragraph, text_line):
     """
     Adds text runs to a paragraph, processing inline formatting tags.
-    Supported tags: [b], [italics], [u]/[underline]
+    Supported tags: [bd], [/bd], [italics], [/italics], [u]/[underline]
     """
-    parts = re.split(r'(\[b\]|\[/b\]|\[italics\]|\[/italics\]|\[u\]|\[/u\]|\[underline\]|\[/underline\])', text_line)
+    parts = re.split(r'(\[bd\]|\[/bd\]|\[italics\]|\[/italics\]|\[u\]|\[/u\]|\[underline\]|\[/underline\])', text_line)
     is_bold = is_italic = is_underline = False
     for part in parts:
         if not part:
             continue
-        if part == "[b]": is_bold = True
-        elif part == "[/b]": is_bold = False
+        if part == "[bd]": is_bold = True
+        elif part == "[/bd]": is_bold = False
         elif part == "[italics]": is_italic = True
         elif part == "[/italics]": is_italic = False
         elif part in ["[u]", "[underline]"]: is_underline = True
@@ -356,7 +357,7 @@ if submitted:
         if is_indented:
             text_content = text_content.replace("[ind]", "").lstrip()
 
-        # More specific regex to avoid conflicts with formatting tags like [b]
+        # More specific regex to avoid conflicts with formatting tags like [bd]
         list_match_letter = re.match(r'^\[([a-zA-Z])\]\s(.*)', text_content)
         list_match_roman = re.match(r'^\[(i{1,3}|iv)\]\s(.*)', text_content)
 
@@ -367,18 +368,16 @@ if submitted:
         elif list_match_letter:
             letter, rest = list_match_letter.groups()
             text_content = f"({letter.lower()})\t{rest.lstrip()}"
-            indent = INDENT_FOR_IND_TAG_CM if is_indented else SUB_LETTER_TEXT_INDENT_NO_IND_CM
-            pf.left_indent = Cm(indent)
+            pf.left_indent = Cm(SUB_LETTER_TEXT_INDENT_NO_IND_CM)
             pf.first_line_indent = Cm(-SUB_LETTER_HANGING_OFFSET_CM)
-            pf.tab_stops.add_tab_stop(Cm(indent))
+            pf.tab_stops.add_tab_stop(Cm(SUB_LETTER_TEXT_INDENT_NO_IND_CM))
             add_formatted_runs(p, text_content)
         elif list_match_roman:
             roman, rest = list_match_roman.groups()
             text_content = f"({roman.lower()})\t{rest.lstrip()}"
-            indent = INDENT_FOR_IND_TAG_CM if is_indented else SUB_LETTER_TEXT_INDENT_NO_IND_CM
-            pf.left_indent = Cm(indent)
+            pf.left_indent = Cm(SUB_ROMAN_TEXT_INDENT_CM)
             pf.first_line_indent = Cm(-SUB_LETTER_HANGING_OFFSET_CM)
-            pf.tab_stops.add_tab_stop(Cm(indent))
+            pf.tab_stops.add_tab_stop(Cm(SUB_ROMAN_TEXT_INDENT_CM))
             add_formatted_runs(p, text_content)
         elif text_content.startswith("[bp]"):
             text_content = text_content.replace("[bp]", "", 1).lstrip()
