@@ -10,7 +10,7 @@ import zipfile
 # --- Constants ---
 INDENT_FOR_IND_TAG_CM = 1.25
 SUB_LETTER_HANGING_OFFSET_CM = 0.50
-SUB_LETTER_TEXT_INDENT_NO_IND_CM = 0.7  # Updated indent for lettered lists
+SUB_LETTER_TEXT_INDENT_NO_IND_CM = 0.7  # Indent for lettered lists
 SUB_ROMAN_TEXT_INDENT_CM = 1.4  # Indent for Roman numeral lists
 NESTED_BULLET_INDENT_CM = INDENT_FOR_IND_TAG_CM + 0.5
 
@@ -356,6 +356,12 @@ if submitted:
         is_indented = "[ind]" in text_content
         if is_indented:
             text_content = text_content.replace("[ind]", "").lstrip()
+
+        # Handle end-of-paragraph marker
+        has_end_paragraph = "[/p]" in text_content
+        if has_end_paragraph:
+            text_content = text_content.replace("[/p]", "").rstrip()
+            pf.space_after = Pt(12)
 
         # More specific regex to avoid conflicts with formatting tags like [bd]
         list_match_letter = re.match(r'^\[([a-zA-Z])\]\s(.*)', text_content)
