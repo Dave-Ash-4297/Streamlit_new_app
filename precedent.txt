@@ -72,7 +72,7 @@ Dear {client_name_input},
 []
 [#]Our current hourly charge-out rates, exclusive of VAT, are as follows:[/p]
 []
-[FEE_TABLE_PLACEHOLDER]
+[FEE TABLE]
 []
 [indiv][#]Our hourly charge-out rates are reviewed periodically and we will notify you of any increases. We will also notify you of any changes in the status of legal personnel and their hourly charge-out rate. Unless otherwise agreed with you, we will account to you every month for the fees that have been incurred in relation to this matter. If you require an up to date statement of fees incurred at any time then please ask us and we will provide you with that information. Unless otherwise stated, interim bills are on account of costs and are usually prepared taking into account the value of the time recorded against the matter as at the date of the interim bill. If we hold any monies on account of your costs when an invoice is raised, these monies will be utilised towards discharging the invoice.[/p][/indiv]
 []

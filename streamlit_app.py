@@ -160,7 +160,6 @@ with st.form("input_form"):
     our_ref = st.text_input("Our Reference", "PP/LEGAL/RAM001/001")
     your_ref = st.text_input("Your Reference (if any)", "")
     letter_date = st.date_input("Letter Date", datetime.today())
-    matter_number = st.text_input("Matter Number", "RAM001/001")
 
     st.header("Client Information")
     client_name_input = st.text_input("Client Full Name / Company Name", "Mr. John Smith")
@@ -184,7 +183,6 @@ with st.form("input_form"):
     qu2_initial_steps = st.text_area("Q2: Immediate Steps to be Taken", "review the documentation you have provided and advise you on the merits of your position and potential next steps. we will also prepare an initial letter to the other side", height=150)
     qu3_timescales = st.text_area("Q3: Estimated Timescales", "We estimate that the initial Work will take approximately 2-4 weeks to complete, depending on the complexity and responsiveness of other parties. We will keep you updated on progress.", height=100)
     qu4_initial_costs_estimate = st.text_input("Q4: Estimated Initial Costs (e.g., 1,500)", "1,500")
-    fee_table_content = st.text_area("Fee Table Content", "Partner: £XXX per hour\nSenior Associate: £YYY per hour\nSolicitor: £ZZZ per hour\nParalegal: £AAA per hour", height=150)
 
     submitted = st.form_submit_button("Generate Documents")
 
@@ -192,13 +190,13 @@ if submitted:
     app_inputs = {
         'qu1_dispute_nature': qu1_dispute_nature, 'qu2_initial_steps': qu2_initial_steps,
         'qu3_timescales': qu3_timescales, 'qu4_initial_costs_estimate': qu4_initial_costs_estimate,
-        'fee_table_content': fee_table_content, 'client_type': client_type,
+        'client_type': client_type,
         'claim_assigned': claim_assigned_input == "Yes", 'selected_track': selected_track,
         'our_ref': our_ref, 'your_ref': your_ref, 'letter_date': letter_date.strftime('%d %B %Y'),
         'client_name_input': client_name_input, 'client_address_line1': client_address_line1,
         'client_address_line2_conditional': client_address_line2 if client_address_line2 else "",
         'client_postcode': client_postcode, 'name': firm_details["person_responsible_name"],
-        'matter_number': matter_number, 'initial_advice_content': initial_advice_content,
+        'matter_number': our_ref, 'initial_advice_content': initial_advice_content,
         'initial_advice_method': initial_advice_method, 'initial_advice_date': initial_advice_date,
         'firm_details': firm_details
     }
@@ -245,7 +243,6 @@ if submitted:
             continue
 
         # --- Placeholder Replacement ---
-        line = line.replace("[FEE_TABLE_PLACEHOLDER]", app_inputs.get('fee_table_content', ''))
         for placeholder, value in placeholder_map.items():
             line = line.replace(placeholder, str(value))
 
