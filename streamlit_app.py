@@ -63,17 +63,16 @@ def add_runs_from_text(paragraph, text_line, app_inputs):
     for placeholder, value in placeholder_map.items():
         text_line = text_line.replace(placeholder, value)
 
-    parts = re.split(r'(\[bold\]|\[end bold\]|\[italics\]|\[end italics\]|\[underline\]|\[end underline\]|\[end\])', text_line)
+    parts = re.split(r'(\[b\]|\[/b\]|\[italics\]|\[/italics\]|\[u\]|\[/u\]|\[underline\]|\[/underline\])', text_line)
     is_bold = is_italic = is_underline = False
     for part in parts:
         if not part: continue
-        if part == "[bold]": is_bold = True
-        elif part == "[end bold]" or (part == "[end]" and is_bold): is_bold = False
+        if part == "[b]": is_bold = True
+        elif part == "[/b]": is_bold = False
         elif part == "[italics]": is_italic = True
-        elif part == "[end italics]" or (part == "[end]" and is_italic): is_italic = False
-        elif part == "[underline]": is_underline = True
-        elif part == "[end underline]" or (part == "[end]" and is_underline): is_underline = False
-        elif part == "[end]": is_bold = is_italic = is_underline = False
+        elif part == "[/italics]": is_italic = False
+        elif part in ["[u]", "[underline]"]: is_underline = True
+        elif part in ["[/u]", "[/underline]"]: is_underline = False
         else:
             run = paragraph.add_run(part)
             run.bold = is_bold
@@ -82,33 +81,29 @@ def add_runs_from_text(paragraph, text_line, app_inputs):
             run.font.name = 'Arial'
             run.font.size = Pt(11)
 
-# Determine if a paragraph should be rendered
-def should_render_paragraph(p_num, p_version, app_inputs):
-    if not p_version: return True
+# Determine if a court track block should be rendered
+def should_render_track_block(tag, app_inputs):
     conditions = {
-        '6': lambda v: (app_inputs['client_type'] == "Individual" and v == '1') or (app_inputs['client_type'] == "Corporate" and v != '1'),
-        '18': lambda v: (app_inputs['client_type'] == "Individual" and v == '1') or (app_inputs['client_type'] == "Corporate" and v != '1'),
-        '24': {
-            '1': lambda: app_inputs['claim_assigned'] and app_inputs['selected_track'] == "Small Claims Track",
-            '2': lambda: app_inputs['claim_assigned'] and app_inputs['selected_track'] == "Fast Track",
-            '3': lambda: app_inputs['claim_assigned'] and app_inputs['selected_track'] == "Intermediate Track",
-            '4': lambda: app_inputs['claim_assigned'] and app_inputs['selected_track'] == "Multi Track",
-            '5': lambda: not app_inputs['claim_assigned'] and app_inputs['selected_track'] == "Small Claims Track",
-            '6': lambda: not app_inputs['claim_assigned'] and app_inputs['selected_track'] == "Fast Track",
-            '7': lambda: not app_inputs['claim_assigned'] and app_inputs['selected_track'] == "Intermediate Track",
-            '8': lambda: not app_inputs['claim_assigned'] and app_inputs['selected_track'] == "Multi Track"
-        }
+        'a1': lambda: app_inputs['claim_assigned'] and app_inputs['selected_track'] == "Small Claims Track",
+        'a2': lambda: app_inputs['claim_assigned'] and app_inputs['selected_track'] == "Fast Track",
+        'a3': lambda: app_inputs['claim_assigned'] and app_inputs['selected_track'] == "Intermediate Track",
+        'a4': lambda: app_inputs['claim_assigned'] and app_inputs['selected_track'] == "Multi Track",
+        'u1': lambda: not app_inputs['claim_assigned'] and app_inputs['selected_track'] == "Small Claims Track",
+        'u2': lambda: not app_inputs['claim_assigned'] and app_inputs['selected_track'] == "Fast Track",
+        'u3': lambda: not app_inputs['claim_assigned'] and app_inputs['selected_track'] == "Intermediate Track",
+        'u4': lambda: not app_inputs['claim_assigned'] and app_inputs['selected_track'] == "Multi Track"
     }
-    if p_num == '24':
-        return conditions[p_num].get(p_version, lambda: False)()
-    return conditions.get(p_num, lambda v: True)(p_version)
+    return conditions.get(tag, lambda: False)()
 
 # Parse precedent text into logical elements
 def preprocess_precedent(precedent_text, app_inputs):
     logical_elements = []
     current_paragraph = None
-    para_tag_regex = re.compile(r'\[(\d+)((?:-(\d+))?)\]')
-    para_end_tag_regex = re.compile(r'\[/(\d+)((?:-(\d+))?)\]')
+    paragraph_counter = 0  # Track numbered paragraphs
+    para_tag_regex = re.compile(r'\[(#|[a-zA-Z]|[i]{1,3}|iv)\]')
+    para_end_tag_regex = re.compile(r'\[/p\]')
+    block_tags = ['[indiv]', '[corp]', '[a1]', '[a2]', '[a3]', '[a4]', '[u1]', '[u2]', '[u3]', '[u4]']
+    end_block_tags = ['[/indiv]', '[/corp]', '[/a1]', '[/a2]', '[/a3]', '[/a4]', '[/u1]', '[/u2]', '[/u3]', '[/u4]']
 
     for line in precedent_text.splitlines():
         while line:
@@ -116,13 +111,12 @@ def preprocess_precedent(precedent_text, app_inputs):
             m_end = para_end_tag_regex.search(line)
 
             if current_paragraph:
-                if m_end and m_end.group(1) == current_paragraph['num'] and \
-                   (m_end.group(3) if m_end.group(2) else None) == current_paragraph['version']:
+                if m_end and current_paragraph['tag'] in ['#', 'a', 'b', 'c', 'i', 'ii', 'iii', 'iv', 'bp']:
                     current_paragraph['lines'].append(line[:m_end.start()])
                     if current_paragraph['is_selected_for_render']:
                         logical_elements.append({
                             'type': 'paragraph_block',
-                            'paragraph_display_number_text': f"{current_paragraph['num']}.",
+                            'paragraph_display_number_text': current_paragraph['display_text'],
                             'content_lines': current_paragraph['lines']
                         })
                     current_paragraph = None
@@ -133,14 +127,20 @@ def preprocess_precedent(precedent_text, app_inputs):
             elif m_start:
                 if content_before_tag := line[:m_start.start()]:
                     logical_elements.append({'type': 'raw_line', 'content': content_before_tag})
-                p_num = m_start.group(1)
-                p_version = m_start.group(3) if m_start.group(2) else None
+                tag = m_start.group(1)
+                display_text = ""
+                if tag == '#':
+                    paragraph_counter += 1
+                    display_text = f"{paragraph_counter}."
+                elif tag in ['a', 'b', 'c', 'i', 'ii', 'iii', 'iv']:
+                    display_text = f"({tag.lower()})"
+                elif tag == 'bp':
+                    display_text = ""
                 current_paragraph = {
-                    'num': p_num,
-                    'version': p_version,
+                    'tag': tag,
+                    'display_text': display_text,
                     'lines': [],
-                    'is_selected_for_render': should_render_paragraph(p_num, p_version, app_inputs),
-                    'paragraph_display_number_text': f"{p_num}."
+                    'is_selected_for_render': True
                 }
                 line = line[m_start.end():]
             else:
@@ -150,7 +150,7 @@ def preprocess_precedent(precedent_text, app_inputs):
     if current_paragraph and current_paragraph['is_selected_for_render'] and current_paragraph['lines']:
         logical_elements.append({
             'type': 'paragraph_block',
-            'paragraph_display_number_text': current_paragraph['paragraph_display_number_text'],
+            'paragraph_display_number_text': current_paragraph['display_text'],
             'content_lines': current_paragraph['lines']
         })
     return logical_elements
@@ -265,7 +265,7 @@ if submitted:
     logical_elements = preprocess_precedent(precedent_content, app_inputs)
     lines_to_process = [
         {'text': e['content'], 'is_numbered_block_line': False} if e['type'] == 'raw_line' else
-        {'text': line, 'is_numbered_block_line': i == 0 and line.strip()}
+        {'text': line, 'is_numbered_block_line': i == 0 and line.strip() and e['paragraph_display_number_text']}
         for e in logical_elements if e['type'] == 'raw_line' or e['type'] == 'paragraph_block'
         for i, line in enumerate([e['content']] if e['type'] == 'raw_line' else e['content_lines'])
     ]
@@ -281,17 +281,20 @@ if submitted:
         is_numbered = line_item['is_numbered_block_line']
 
         if line == "[indiv]": in_indiv_block = True; continue
-        if line == "[end indiv]": in_indiv_block = False; continue
+        if line == "[/indiv]": in_indiv_block = False; continue
         if line == "[corp]": in_corp_block = True; continue
-        if line == "[end corp]": in_corp_block = False; continue
-        track_tags = ['[all_sc]', '[all_ft]', '[all_int]', '[all_mt]', '[sc]', '[ft]', '[int]', '[mt]']
-        end_track_tags = ['[end all_sc]', '[end all_ft]', '[end all_int]', '[end all_mt]', '[end sc]', '[end ft]', '[end int]', '[end mt]']
-        if line in track_tags: active_track_block = line; continue
-        if line in end_track_tags and active_track_block and line == f"[end {active_track_block[1:-1]}]": active_track_block = None; continue
+        if line == "[/corp]": in_corp_block = False; continue
+        track_tags = ['[a1]', '[a2]', '[a3]', '[a4]', '[u1]', '[u2]', '[u3]', '[u4]']
+        end_track_tags = ['[/a1]', '[/a2]', '[/a3]', '[/a4]', '[/u1]', '[/u2]', '[/u3]', '[/u4]']
+        if line in track_tags:
+            active_track_block = line[1:-1]
+            if not should_render_track_block(active_track_block, app_inputs): active_track_block = None
+            continue
+        if line in end_track_tags and active_track_block and line == f"[/{active_track_block}]": active_track_block = None; continue
 
         if (in_indiv_block and app_inputs['client_type'] != "Individual") or \
            (in_corp_block and app_inputs['client_type'] != "Corporate") or \
-           (active_track_block and not should_render_paragraph('24', active_track_block[1:-1].split('-')[-1] if '-' in active_track_block else None, app_inputs)):
+           (active_track_block and not should_render_track_block(active_track_block, app_inputs)):
             continue
 
         if line == "[]":
@@ -311,22 +314,28 @@ if submitted:
         space_after = Pt(0)
         format_type = "normal"
         text_content = line
+        original_line = line
 
         if is_numbered:
             style_name = 'List Number'
             format_type = "main_numbered_auto"
-        elif text_content.startswith("[ind]"):
+            text_content = text_content  # Numbering is handled by paragraph_display_number_text
+        elif original_line.startswith("[ind]"):
             text_content = text_content.replace("[ind]", "", 1).lstrip()
             format_type = "ind_block_only"
         elif sub_letter_match := re.match(r'^\[([a-zA-Z])\](.*)', text_content):
             letter, rest = sub_letter_match.groups()
             text_content = f"({letter.lower()})\t{rest.lstrip()}"
             format_type = "sub_letter"
+        elif sub_roman_match := re.match(r'^\[(i{1,3}|iv)\](.*)', text_content):
+            roman, rest = sub_roman_match.groups()
+            text_content = f"({roman.lower()})\t{rest.lstrip()}"
+            format_type = "sub_letter"
         elif text_content.startswith("[bp]"):
             style_name = 'ListBullet'
             text_content = text_content.replace("[bp]", "", 1).lstrip()
             space_after = Pt(6)
-            format_type = "ind_bullet" if text_content.startswith("[ind]") else "bullet_auto"
+            format_type = "ind_bullet" if "[ind]" in original_line else "bullet_auto"
 
         if not text_content.strip() and style_name == 'Normal': continue
 
@@ -337,7 +346,7 @@ if submitted:
 
         if format_type == "main_numbered_auto": pass
         elif format_type == "sub_letter":
-            indent = INDENT_FOR_IND_TAG_CM + SUB_LETTER_HANGING_OFFSET_CM if "[ind]" in line else SUB_LETTER_TEXT_INDENT_NO_IND_CM
+            indent = INDENT_FOR_IND_TAG_CM + SUB_LETTER_HANGING_OFFSET_CM if "[ind]" in original_line else SUB_LETTER_TEXT_INDENT_NO_IND_CM
             pf.left_indent = Cm(indent)
             pf.first_line_indent = Cm(-SUB_LETTER_HANGING_OFFSET_CM)
             pf.tab_stops.add_tab_stop(Cm(indent))
