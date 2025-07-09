@@ -6,6 +6,11 @@ import io
 from datetime import datetime
 import re
 import zipfile
+import logging
+
+# --- Setup Logging ---
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 # --- Constants ---
 INDENT_FOR_IND_TAG_CM = 1.25
@@ -45,9 +50,16 @@ def load_precedent_text():
     """Loads and caches the precedent text from a file."""
     try:
         with open("precedent.txt", "r", encoding="utf-8") as f:
-            return f.read().strip()
+            content = f.read().strip()
+            logger.info("Successfully loaded precedent.txt")
+            return content
     except FileNotFoundError:
         st.error("precedent.txt not found. Please ensure the file exists in the same directory.")
+        logger.error("precedent.txt not found.")
+        return ""
+    except Exception as e:
+        st.error(f"Error loading precedent.txt: {str(e)}")
+        logger.error("Error loading precedent.txt: %s", str(e))
         return ""
 
 # --- Document Generation Helpers ---
@@ -59,6 +71,7 @@ def get_placeholder_map(app_inputs, firm_details):
         "[qu2_initial_steps]": app_inputs.get('qu2_initial_steps', ""),
         "[qu3_timescales]": app_inputs.get('qu3_timescales', ""),
         "[qu4_initial_costs_estimate]": app_inputs.get('qu4_initial_costs_estimate', 'XX,XXX'),
+        "[FEE_TABLE]": app_inputs.get('fee_table', "Fee table not provided"),
         "{our_ref}": str(app_inputs.get('our_ref', '')),
         "{your_ref}": str(app_inputs.get('your_ref', '')),
         "{letter_date}": str(app_inputs.get('letter_date', '')),
@@ -68,17 +81,17 @@ def get_placeholder_map(app_inputs, firm_details):
         "{client_postcode}": str(app_inputs.get('client_postcode', '')),
         "{name}": str(app_inputs.get('name', ''))
     }
-    # Add firm details to the placeholder map, e.g., {firm_name}
     firm_placeholders = {f"{{{k}}}": str(v) for k, v in firm_details.items()}
     placeholders.update(firm_placeholders)
+    logger.debug("Placeholder map created: %s", placeholders)
     return placeholders
 
 def add_formatted_runs(paragraph, text_line):
     """
     Adds text runs to a paragraph, processing inline formatting tags.
-    Supported tags: [bd], [/bd], [italics], [/italics], [u]/[underline]
+    Supported tags: [bd], [/bd], [b], [/b], [italics], [/italics], [u]/[underline]
     """
-    parts = re.split(r'(\[bd\]|\[/bd\]|\[italics\]|\[/italics\]|\[u\]|\[/u\]|\[underline\]|\[/underline\])', text_line)
+    parts = re.split(r'(\[bd\]|\[/bd\]|\[b\]|\[/b\]|\[italics\]|\[/italics\]|\[u\]|\[/u\]|\[underline\]|\[/underline\])', text_line)
     is_bold = is_italic = is_underline = False
     for part in parts:
         if not part:
@@ -96,6 +109,7 @@ def add_formatted_runs(paragraph, text_line):
             run.underline = is_underline
             run.font.name = 'Arial'
             run.font.size = Pt(11)
+    logger.debug("Processed formatted runs for text: %s", text_line)
 
 def should_render_track_block(tag, claim_assigned, selected_track):
     """Determines if a court track block should be rendered based on the tag and inputs."""
@@ -109,7 +123,9 @@ def should_render_track_block(tag, claim_assigned, selected_track):
     if not expected:
         return False
     expected_assignment, expected_track = expected
-    return claim_assigned == expected_assignment and selected_track == expected_track
+    result = claim_assigned == expected_assignment and selected_track == expected_track
+    logger.debug("Track block %s rendering: %s (claim_assigned=%s, selected_track=%s)", tag, result, claim_assigned, selected_track)
+    return result
 
 def generate_initial_advice_doc(app_inputs):
     """Generates the Initial Advice Summary Word document."""
@@ -146,7 +162,23 @@ def generate_initial_advice_doc(app_inputs):
     doc_io = io.BytesIO()
     doc.save(doc_io)
     doc_io.seek(0)
+    logger.info("Initial Advice Summary document generated.")
     return doc_io
+
+def generate_fee_table(hourly_rate, client_type):
+    """Generates a fee table as a string based on hourly rate and client type."""
+    roles = [
+        ("Partner", hourly_rate * 1.5),
+        ("Senior Associate", hourly_rate),
+        ("Associate", hourly_rate * 0.8),
+        ("Trainee", hourly_rate * 0.5)
+    ]
+    table_content = "Role | Hourly Rate (excl. VAT)\n-----|------------------------\n"
+    for role, rate in roles:
+        table_content += f"{role} | £{rate:,.2f}\n"
+    if client_type == "Corporate":
+        table_content += "\nNote: Corporate clients may be subject to additional administrative fees."
+    return table_content
 
 # --- Streamlit App UI ---
 
@@ -184,13 +216,11 @@ st.markdown("""
         border: 1px solid #444;
         box-shadow: 0 4px 8px rgba(0,0,0,0.4);
     }
-    /* Ensure input text is visible */
     div[data-baseweb="input"] > input, 
     div[data-baseweb="textarea"] > textarea {
         background-color: #333333;
         color: #FFFFFF;
     }
-    /* Ensure selectbox items are visible */
     div[data-baseweb="select"] > div {
         background-color: #333333;
         color: #FFFFFF;
@@ -248,15 +278,14 @@ with st.form("input_form"):
 
     if cost_type_is_range:
         default_lower = 2 * hourly_rate
-        default_upper = 4 * hourly_rate
+        default_upper = 3 * hourly_rate
         col1, col2 = st.columns(2)
         with col1:
             lower_cost_estimate = st.number_input("Lower estimate (£)", value=float(default_lower), step=float(cost_step))
         with col2:
             upper_cost_estimate = st.number_input("Upper estimate (£)", value=float(default_upper), step=float(cost_step))
     else:
-        # Default fixed cost can be the average of the default range
-        default_fixed = (2 * hourly_rate + 4 * hourly_rate) / 2
+        default_fixed = (2 * hourly_rate + 3 * hourly_rate) / 2
         fixed_cost_estimate = st.number_input("Fixed cost estimate (£)", value=float(default_fixed), step=float(cost_step))
 
     submitted = st.form_submit_button("Generate Documents")
@@ -265,7 +294,6 @@ if submitted:
     vat_rate = 0.20
 
     if 'lower_cost_estimate' in locals() and 'upper_cost_estimate' in locals():
-        # Cost Range
         lower_cost_vat = lower_cost_estimate * vat_rate
         upper_cost_vat = upper_cost_estimate * vat_rate
         lower_cost_total = lower_cost_estimate + lower_cost_vat
@@ -276,7 +304,6 @@ if submitted:
             f"which at the current rate would be £{lower_cost_total:,.2f} to £{upper_cost_total:,.2f} with VAT included."
         )
     elif 'fixed_cost_estimate' in locals():
-        # Fixed Cost
         fixed_cost_vat = fixed_cost_estimate * vat_rate
         fixed_cost_total = fixed_cost_estimate + fixed_cost_vat
         costs_text = (
@@ -285,20 +312,31 @@ if submitted:
             f"which at the current rate would be £{fixed_cost_total:,.2f} with VAT included."
         )
     else:
-        # This case should ideally not be reached if the form logic is correct
         costs_text = "[COSTING INFORMATION TO BE CONFIRMED]"
 
+    # Generate fee table based on hourly rate and client type
+    fee_table = generate_fee_table(hourly_rate, client_type)
+
     app_inputs = {
-        'qu1_dispute_nature': qu1_dispute_nature, 'qu2_initial_steps': qu2_initial_steps,
-        'qu3_timescales': qu3_timescales, 'qu4_initial_costs_estimate': costs_text,
+        'qu1_dispute_nature': qu1_dispute_nature, 
+        'qu2_initial_steps': qu2_initial_steps,
+        'qu3_timescales': qu3_timescales, 
+        'qu4_initial_costs_estimate': costs_text,
+        'fee_table': fee_table,
         'client_type': client_type,
-        'claim_assigned': claim_assigned_input == "Yes", 'selected_track': selected_track,
-        'our_ref': our_ref, 'your_ref': your_ref, 'letter_date': letter_date.strftime('%d/%m/%Y'),
-        'client_name_input': client_name_input, 'client_address_line1': client_address_line1,
+        'claim_assigned': claim_assigned_input == "Yes", 
+        'selected_track': selected_track,
+        'our_ref': our_ref, 
+        'your_ref': your_ref, 
+        'letter_date': letter_date.strftime('%d/%m/%Y'),
+        'client_name_input': client_name_input, 
+        'client_address_line1': client_address_line1,
         'client_address_line2_conditional': client_address_line2 if client_address_line2 else "",
-        'client_postcode': client_postcode, 'name': firm_details["person_responsible_name"],
+        'client_postcode': client_postcode, 
+        'name': firm_details["person_responsible_name"],
         'initial_advice_content': initial_advice_content,
-        'initial_advice_method': initial_advice_method, 'initial_advice_date': initial_advice_date,
+        'initial_advice_method': initial_advice_method, 
+        'initial_advice_date': initial_advice_date,
         'firm_details': firm_details
     }
 
@@ -312,98 +350,113 @@ if submitted:
     in_indiv_block = in_corp_block = False
     active_track_block = None
     
-    for line in precedent_content.splitlines():
-        line = line.strip()
+    try:
+        for line in precedent_content.splitlines():
+            line = line.strip()
+            logger.debug("Processing line: %s", line)
 
-        # --- Block-level Tags ---
-        if line.startswith("[indiv]"): in_indiv_block = True; continue
-        if line.startswith("[/indiv]"): in_indiv_block = False; continue
-        if line.startswith("[corp]"): in_corp_block = True; continue
-        if line.startswith("[/corp]"): in_corp_block = False; continue
-        
-        track_tag_match = re.match(r'\[/?(a[1-4]|u[1-4])\]', line)
-        if track_tag_match:
-            tag = track_tag_match.group(1)
-            if line.startswith('[/'):
-                if active_track_block == tag:
-                    active_track_block = None
-            else:
-                active_track_block = tag
-            continue
+            # --- Block-level Tags ---
+            if line.startswith("[indiv]"): 
+                in_indiv_block = True
+                continue
+            if line.startswith("[/indiv]"): 
+                in_indiv_block = False
+                continue
+            if line.startswith("[corp]"): 
+                in_corp_block = True
+                continue
+            if line.startswith("[/corp]"): 
+                in_corp_block = False
+                continue
+            
+            track_tag_match = re.match(r'\[/?(a[1-4]|u[1-4])\]', line)
+            if track_tag_match:
+                tag = track_tag_match.group(1)
+                if line.startswith('[/'):
+                    if active_track_block == tag:
+                        active_track_block = None
+                else:
+                    active_track_block = tag
+                continue
 
-        # --- Conditional Rendering ---
-        if (in_indiv_block and app_inputs['client_type'] != "Individual") or \
-           (in_corp_block and app_inputs['client_type'] != "Corporate") or \
-           (active_track_block and not should_render_track_block(active_track_block, app_inputs['claim_assigned'], app_inputs['selected_track'])):
-            continue
-        
-        if not line or line == "[]":
-            if doc.paragraphs:
-                doc.paragraphs[-1].paragraph_format.space_after = Pt(12)
-            continue
+            # --- Conditional Rendering ---
+            if (in_indiv_block and app_inputs['client_type'] != "Individual") or \
+               (in_corp_block and app_inputs['client_type'] != "Corporate") or \
+               (active_track_block and not should_render_track_block(active_track_block, app_inputs['claim_assigned'], app_inputs['selected_track'])):
+                logger.debug("Skipping line due to conditional rendering: %s", line)
+                continue
+            
+            if not line or line == "[]":
+                if doc.paragraphs:
+                    doc.paragraphs[-1].paragraph_format.space_after = Pt(12)
+                continue
 
-        # --- Placeholder Replacement ---
-        for placeholder, value in placeholder_map.items():
-            line = line.replace(placeholder, str(value))
+            # --- Placeholder Replacement ---
+            for placeholder, value in placeholder_map.items():
+                line = line.replace(placeholder, str(value))
 
-        # --- Paragraph Styling and Content ---
-        p = doc.add_paragraph()
-        pf = p.paragraph_format
-        pf.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
-        pf.space_after = Pt(0)
-        
-        text_content = line
-        is_indented = "[ind]" in text_content
-        if is_indented:
-            text_content = text_content.replace("[ind]", "").lstrip()
-
-        # Handle end-of-paragraph marker
-        has_end_paragraph = "[/p]" in text_content
-        if has_end_paragraph:
-            text_content = text_content.replace("[/p]", "").rstrip()
-            pf.space_after = Pt(12)
-
-        # More specific regex to avoid conflicts with formatting tags like [bd]
-        list_match_letter = re.match(r'^\[([a-zA-Z])\]\s(.*)', text_content)
-        list_match_roman = re.match(r'^\[(i{1,3}|iv|v|vi|vii)\]\s(.*)', text_content)
-
-        if text_content.startswith("[#]"):
-            p.style = 'List Number'
-            text_content = text_content.replace("[#]", "", 1).lstrip()
-            add_formatted_runs(p, text_content)
-        elif list_match_letter:
-            letter, rest = list_match_letter.groups()
-            text_content = f"({letter.lower()})\t{rest.lstrip()}"
-            pf.left_indent = Cm(SUB_LETTER_TEXT_INDENT_NO_IND_CM)
-            pf.first_line_indent = Cm(-SUB_LETTER_HANGING_OFFSET_CM)
-            pf.tab_stops.add_tab_stop(Cm(SUB_LETTER_TEXT_INDENT_NO_IND_CM))
-            add_formatted_runs(p, text_content)
-        elif list_match_roman:
-            roman, rest = list_match_roman.groups()
-            text_content = f"({roman.lower()})\t{rest.lstrip()}"
-            pf.left_indent = Cm(SUB_ROMAN_TEXT_INDENT_CM)
-            pf.first_line_indent = Cm(-SUB_LETTER_HANGING_OFFSET_CM)
-            pf.tab_stops.add_tab_stop(Cm(SUB_ROMAN_TEXT_INDENT_CM))
-            add_formatted_runs(p, text_content)
-        elif text_content.startswith("[bp]"):
-            text_content = text_content.replace("[bp]", "", 1).lstrip()
-            p.style = 'List Bullet'
-            pf.space_after = Pt(6)
-            base_indent = INDENT_FOR_IND_TAG_CM
+            # --- Paragraph Styling and Content ---
+            p = doc.add_paragraph()
+            pf = p.paragraph_format
+            pf.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
+            pf.space_after = Pt(0)
+            
+            text_content = line
+            is_indented = "[ind]" in text_content
             if is_indented:
-                # This is a nested bullet point, apply extra indent
-                base_indent = NESTED_BULLET_INDENT_CM
-            pf.left_indent = Cm(base_indent)
-            add_formatted_runs(p, text_content)
-        elif is_indented:
-            pf.left_indent = Cm(INDENT_FOR_IND_TAG_CM)
-            add_formatted_runs(p, text_content)
-        else:
-            add_formatted_runs(p, text_content)
+                text_content = text_content.replace("[ind]", "").lstrip()
+
+            # Handle end-of-paragraph marker
+            has_end_paragraph = "[/p]" in text_content
+            if has_end_paragraph:
+                text_content = text_content.replace("[/p]", "").rstrip()
+                pf.space_after = Pt(12)
+
+            # More specific regex to avoid conflicts with formatting tags like [bd], [b]
+            list_match_letter = re.match(r'^\[([a-zA-Z])\]\s(.*)', text_content)
+            list_match_roman = re.match(r'^\[(i{1,3}|iv|v|vi|vii)\]\s(.*)', text_content)
+
+            if text_content.startswith("[#]"):
+                p.style = 'List Number'
+                text_content = text_content.replace("[#]", "", 1).lstrip()
+                add_formatted_runs(p, text_content)
+            elif list_match_letter:
+                letter, rest = list_match_letter.groups()
+                text_content = f"({letter.lower()})\t{rest.lstrip()}"
+                pf.left_indent = Cm(SUB_LETTER_TEXT_INDENT_NO_IND_CM)
+                pf.first_line_indent = Cm(-SUB_LETTER_HANGING_OFFSET_CM)
+                pf.tab_stops.add_tab_stop(Cm(SUB_LETTER_TEXT_INDENT_NO_IND_CM))
+                add_formatted_runs(p, text_content)
+            elif list_match_roman:
+                roman, rest = list_match_roman.groups()
+                text_content = f"({roman.lower()})\t{rest.lstrip()}"
+                pf.left_indent = Cm(SUB_ROMAN_TEXT_INDENT_CM)
+                pf.first_line_indent = Cm(-SUB_LETTER_HANGING_OFFSET_CM)
+                pf.tab_stops.add_tab_stop(Cm(SUB_ROMAN_TEXT_INDENT_CM))
+                add_formatted_runs(p, text_content)
+            elif text_content.startswith("[bp]"):
+                text_content = text_content.replace("[bp]", "", 1).lstrip()
+                p.style = 'List Bullet'
+                pf.space_after = Pt(6)
+                base_indent = INDENT_FOR_IND_TAG_CM
+                if is_indented:
+                    base_indent = NESTED_BULLET_INDENT_CM
+                pf.left_indent = Cm(base_indent)
+                add_formatted_runs(p, text_content)
+            elif is_indented:
+                pf.left_indent = Cm(INDENT_FOR_IND_TAG_CM)
+                add_formatted_runs(p, text_content)
+            else:
+                add_formatted_runs(p, text_content)
+    except Exception as e:
+        st.error(f"Error processing precedent text: {str(e)}")
+        logger.error("Error processing precedent text: %s", str(e))
+        raise
 
     client_care_doc_io = io.BytesIO()
     doc.save(client_care_doc_io)
     client_care_doc_io.seek(0)
+    logger.info("Client Care Letter document generated.")
 
     # --- Generate Initial Advice Document ---
     advice_doc_io = generate_initial_advice_doc(app_inputs)
