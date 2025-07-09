@@ -179,8 +179,8 @@ with st.form("input_form"):
     selected_track = st.selectbox("Which court track applies or is anticipated?", track_options)
 
     st.header("Dynamic Content")
-    qu1_dispute_nature = st.text_area("Q1: Nature of the Dispute", "a contractual matter related to services provided", height=75)
-    qu2_initial_steps = st.text_area("Q2: Immediate Steps to be Taken", "review the documentation you have provided and advise you on the merits of your position and potential next steps. we will also prepare an initial letter to the other side", height=150)
+    qu1_dispute_nature = st.text_area('We are instructed in relation to [your text below is inserted here - define the dispute] (the "Dispute").', "a contractual matter related to services provided", height=75)
+    qu2_initial_steps = st.text_area('Per our recent discussions [when you came in to the office, or when we spoke on the phone, it was agreed that we would HERE YOU NEED TO SET OUT WHAT INITIAL WORK YOU AGREED TO DO] (the "Work")', "review the documentation you have provided and advise you on the merits of your position and potential next steps. we will also prepare an initial letter to the other side", height=150)
     qu3_timescales = st.text_area("Q3: Estimated Timescales", "We estimate that the initial Work will take approximately 2-4 weeks to complete, depending on the complexity and responsiveness of other parties. We will keep you updated on progress.", height=100)
     qu4_initial_costs_estimate = st.text_input("Q4: Estimated Initial Costs (e.g., 1,500)", "1,500")
 
