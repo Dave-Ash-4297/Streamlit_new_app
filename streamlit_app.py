@@ -126,7 +126,7 @@ def generate_initial_advice_doc(app_inputs):
     table.style = 'Table Grid'
     table.autofit = True
     rows = [
-        ("Date of Advice", app_inputs.get('initial_advice_date', '').strftime('%d %B %Y')),
+        ("Date of Advice", app_inputs.get('initial_advice_date', '').strftime('%d/%m/%Y')),
         ("Method of Advice", app_inputs.get('initial_advice_method', '')),
         ("Advice Given", app_inputs.get('initial_advice_content', ''))
     ]
@@ -148,64 +148,146 @@ def generate_initial_advice_doc(app_inputs):
 
 # --- Streamlit App UI ---
 
-st.set_page_config(layout="wide")
+st.set_page_config(layout="wide", page_title="Ramsdens Client Care Letter Generator")
+
+# --- Custom CSS for better aesthetics ---
+st.markdown("""
+<style>
+    .stApp {
+        background-color: #1E1E1E; /* Dark background */
+        color: #FFFFFF;
+    }
+    .stButton>button {
+        background-color: #0078D4; /* A bright, accessible blue */
+        color: white;
+        border-radius: 5px;
+        padding: 10px 20px;
+        border: 1px solid #005A9E;
+        font-size: 16px;
+    }
+    .stButton>button:hover {
+        background-color: #005A9E;
+    }
+    h1, h2, h3 {
+        color: #FFFFFF; /* White text for high contrast */
+    }
+    .stTextInput, .stTextArea, .stDateInput, .stSelectbox, .stNumberInput {
+        border-radius: 5px;
+        border: 1px solid #888;
+    }
+    .stForm {
+        background-color: #2D2D2D; /* Slightly lighter dark for the form */
+        padding: 2em;
+        border-radius: 10px;
+        border: 1px solid #444;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.4);
+    }
+    /* Ensure input text is visible */
+    div[data-baseweb="input"] > input, 
+    div[data-baseweb="textarea"] > textarea {
+        background-color: #333333;
+        color: #FFFFFF;
+    }
+    /* Ensure selectbox items are visible */
+    div[data-baseweb="select"] > div {
+        background-color: #333333;
+        color: #FFFFFF;
+    }
+    .stRadio > label {
+        color: #FFFFFF !important; /* Ensure radio button labels are white */
+    }
+</style>
+""", unsafe_allow_html=True)
+
 st.title("Ramsdens Client Care Letter Generator")
 
 firm_details = load_firm_details()
 precedent_content = load_precedent_text()
 
 with st.form("input_form"):
-    st.header("Letter Details")
-    our_ref = st.text_input("Our Reference", "PP/LEGAL/RAM001/001")
-    your_ref = st.text_input("Your Reference (if any)", "")
-    letter_date = st.date_input("Letter Date", datetime.today())
+    st.header("1. Letter & Client Details")
+    col1, col2 = st.columns(2)
+    with col1:
+        our_ref = st.text_input("Our Reference", "PP/LEGAL/RAM001/001")
+        your_ref = st.text_input("Your Reference (if any)", "")
+        letter_date = st.date_input("Letter Date", datetime.today())
+    with col2:
+        client_name_input = st.text_input("Client Full Name / Company Name", "Mr. John Smith")
+        client_address_line1 = st.text_input("Client Address Line 1", "123 Example Street")
+        client_address_line2 = st.text_input("Client Address Line 2", "SomeTown")
+        client_postcode = st.text_input("Client Postcode", "EX4 MPL")
+        client_type = st.radio("Client Type", ("Individual", "Corporate"), horizontal=True)
 
-    st.header("Client Information")
-    client_name_input = st.text_input("Client Full Name / Company Name", "Mr. John Smith")
-    client_address_line1 = st.text_input("Client Address Line 1", "123 Example Street")
-    client_address_line2 = st.text_input("Client Address Line 2", "SomeTown")
-    client_postcode = st.text_input("Client Postcode", "EX4 MPL")
-    client_type = st.radio("Client Type", ("Individual", "Corporate"))
+    st.markdown("---")
+    st.header("2. Initial Advice & Case Details")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.subheader("Initial Advice")
+        initial_advice_content = st.text_area("Initial Advice Given", "Advised on the merits of the claim and potential next steps.", height=100)
+        initial_advice_method = st.selectbox("Method of Initial Advice", ["Phone Call", "In Person", "Teams Call"])
+        initial_advice_date = st.date_input("Date of Initial Advice", datetime.today())
+    with col2:
+        st.subheader("Case Track")
+        claim_assigned_input = st.radio("Is the claim already assigned to a court track?", ("Yes", "No"), horizontal=True)
+        track_options = ["Small Claims Track", "Fast Track", "Intermediate Track", "Multi Track"]
+        selected_track = st.selectbox("Which court track applies or is anticipated?", track_options)
 
-    st.header("Initial Advice Details")
-    initial_advice_content = st.text_area("Initial Advice Given", "Advised on the merits of the claim and potential next steps.", height=100)
-    initial_advice_method = st.selectbox("Method of Initial Advice", ["Phone Call", "In Person", "Teams Call"])
-    initial_advice_date = st.date_input("Date of Initial Advice", datetime.today())
+    st.markdown("---")
+    st.header("3. Dynamic Content for Letter")
+    qu1_dispute_nature = st.text_area('**Dispute Nature:** We are instructed in relation to...', "a contractual matter where you wish to bring a claim against your landlord", height=75, help='Define the core of the dispute.')
+    qu2_initial_steps = st.text_area('**Initial Work:** Per our recent discussions, we agreed to...', "review the documentation you have provided and advise you on the merits of your case and set out the next steps", height=150, help='Set out the initial work you agreed to do.')
+    qu3_timescales = st.text_area("**Estimated Timescales:**", "We estimate that to complete the initial advice for you we will take approximately two to four weeks to complete. Obviously, where other parties are involved this will depend on the complexity of the matter and the responsiveness of other parties. We will keep you updated on progress.", height=100)
+    
+    st.subheader("Estimated Initial Costs")
+    hourly_rate = st.number_input("Your Hourly Rate (£)", value=300, min_value=0, step=10)
+    cost_step = hourly_rate / 2 if hourly_rate > 0 else 50
 
-    st.header("Case Details")
-    claim_assigned_input = st.radio("Is the claim already assigned to a court track?", ("Yes", "No"))
-    track_options = ["Small Claims Track", "Fast Track", "Intermediate Track", "Multi Track"]
-    selected_track = st.selectbox("Which court track applies or is anticipated?", track_options)
+    cost_type_is_range = st.toggle("Use a cost range", value=True)
 
-    st.header("Dynamic Content")
-    qu1_dispute_nature = st.text_area('We are instructed in relation to [your text below is inserted here - define the dispute] (the "Dispute").', "a contractual matter where you wish to bring a claim against your landlord", height=75)
-    qu2_initial_steps = st.text_area('Per our recent discussions [when you came in to the office, or when we spoke on the phone, it was agreed that we would HERE YOU NEED TO SET OUT WHAT INITIAL WORK YOU AGREED TO DO] (the "Work").', "review the documentation you have provided and advise you on the merits of your case and set out the next steps", height=150)
-    qu3_timescales = st.text_area("Q3: Estimated Timescales", "We estimate that to complete the initial advice for you we will take approximately two to fourt weeks to complete. Obviously, where other parties are involved this will depend on the complexity of the matter and the responsiveness of other parties. We will keep you updated on progress.", height=100)
-    st.subheader("Q4: Estimated Initial Costs")
-    lower_cost_estimate = st.number_input("Lower estimate (£)", value=1500, step=100)
-    upper_cost_estimate = st.number_input("Upper estimate (£)", value=2000, step=100)
+    if cost_type_is_range:
+        col1, col2 = st.columns(2)
+        with col1:
+            lower_cost_estimate = st.number_input("Lower estimate (£)", value=1500, step=cost_step)
+        with col2:
+            upper_cost_estimate = st.number_input("Upper estimate (£)", value=2000, step=cost_step)
+    else:
+        fixed_cost_estimate = st.number_input("Fixed cost estimate (£)", value=1750, step=cost_step)
 
     submitted = st.form_submit_button("Generate Documents")
 
 if submitted:
     vat_rate = 0.20
-    lower_cost_vat = lower_cost_estimate * vat_rate
-    upper_cost_vat = upper_cost_estimate * vat_rate
-    lower_cost_total = lower_cost_estimate + lower_cost_vat
-    upper_cost_total = upper_cost_estimate + upper_cost_vat
 
-    costs_text = (
-        f"£{lower_cost_estimate:,.2f} to £{upper_cost_estimate:,.2f} plus VAT "
-        f"(currently standing at 20% but subject to change by the government) "
-        f"which at the current rate would be £{lower_cost_total:,.2f} to £{upper_cost_total:,.2f} with VAT included."
-    )
+    if 'lower_cost_estimate' in locals() and 'upper_cost_estimate' in locals():
+        # Cost Range
+        lower_cost_vat = lower_cost_estimate * vat_rate
+        upper_cost_vat = upper_cost_estimate * vat_rate
+        lower_cost_total = lower_cost_estimate + lower_cost_vat
+        upper_cost_total = upper_cost_estimate + upper_cost_vat
+        costs_text = (
+            f"£{lower_cost_estimate:,.2f} to £{upper_cost_estimate:,.2f} plus VAT "
+            f"(currently standing at 20% but subject to change by the government) "
+            f"which at the current rate would be £{lower_cost_total:,.2f} to £{upper_cost_total:,.2f} with VAT included."
+        )
+    elif 'fixed_cost_estimate' in locals():
+        # Fixed Cost
+        fixed_cost_vat = fixed_cost_estimate * vat_rate
+        fixed_cost_total = fixed_cost_estimate + fixed_cost_vat
+        costs_text = (
+            f"a fixed fee of £{fixed_cost_estimate:,.2f} plus VAT "
+            f"(currently standing at 20% but subject to change by the government) "
+            f"which at the current rate would be £{fixed_cost_total:,.2f} with VAT included."
+        )
+    else:
+        # This case should ideally not be reached if the form logic is correct
+        costs_text = "[COSTING INFORMATION TO BE CONFIRMED]"
 
     app_inputs = {
         'qu1_dispute_nature': qu1_dispute_nature, 'qu2_initial_steps': qu2_initial_steps,
         'qu3_timescales': qu3_timescales, 'qu4_initial_costs_estimate': costs_text,
         'client_type': client_type,
         'claim_assigned': claim_assigned_input == "Yes", 'selected_track': selected_track,
-        'our_ref': our_ref, 'your_ref': your_ref, 'letter_date': letter_date.strftime('%d %B %Y'),
+        'our_ref': our_ref, 'your_ref': your_ref, 'letter_date': letter_date.strftime('%d/%m/%Y'),
         'client_name_input': client_name_input, 'client_address_line1': client_address_line1,
         'client_address_line2_conditional': client_address_line2 if client_address_line2 else "",
         'client_postcode': client_postcode, 'name': firm_details["person_responsible_name"],
@@ -306,17 +388,20 @@ if submitted:
     # --- Generate Initial Advice Document ---
     advice_doc_io = generate_initial_advice_doc(app_inputs)
 
-    # --- Create ZIP file for Download ---
-    zip_io = io.BytesIO()
-    with zipfile.ZipFile(zip_io, 'w', zipfile.ZIP_DEFLATED) as zipf:
-        zipf.writestr(f"Client_Care_Letter_{client_name_input.replace(' ', '_')}.docx", client_care_doc_io.getvalue())
-        zipf.writestr(f"Initial_Advice_Summary_{client_name_input.replace(' ', '_')}.docx", advice_doc_io.getvalue())
-    zip_io.seek(0)
-
     st.success("Documents Generated Successfully!")
-    st.download_button(
-        label="Download All Documents as ZIP",
-        data=zip_io,
-        file_name=f"Client_Documents_{client_name_input.replace(' ', '_')}.zip",
-        mime="application/zip"
-    )
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.download_button(
+            label="Download Client Care Letter",
+            data=client_care_doc_io,
+            file_name=f"Client_Care_Letter_{client_name_input.replace(' ', '_')}.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        )
+    with col2:
+        st.download_button(
+            label="Download Initial Advice Summary",
+            data=advice_doc_io,
+            file_name=f"Initial_Advice_Summary_{client_name_input.replace(' ', '_')}.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        )
