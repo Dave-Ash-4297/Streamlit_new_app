@@ -239,19 +239,23 @@ with st.form("input_form"):
     qu3_timescales = st.text_area("**Estimated Timescales:**", "We estimate that to complete the initial advice for you we will take approximately two to four weeks to complete. Obviously, where other parties are involved this will depend on the complexity of the matter and the responsiveness of other parties. We will keep you updated on progress.", height=100)
     
     st.subheader("Estimated Initial Costs")
-    hourly_rate = st.number_input("Your Hourly Rate (£)", value=300, min_value=0, step=10)
+    hourly_rate = st.number_input("Your Hourly Rate (£)", value=295, min_value=0, step=10)
     cost_step = hourly_rate / 2 if hourly_rate > 0 else 50
 
     cost_type_is_range = st.toggle("Use a cost range", value=True)
 
     if cost_type_is_range:
+        default_lower = 2 * hourly_rate
+        default_upper = 4 * hourly_rate
         col1, col2 = st.columns(2)
         with col1:
-            lower_cost_estimate = st.number_input("Lower estimate (£)", value=1500.0, step=float(cost_step))
+            lower_cost_estimate = st.number_input("Lower estimate (£)", value=float(default_lower), step=float(cost_step))
         with col2:
-            upper_cost_estimate = st.number_input("Upper estimate (£)", value=2000.0, step=float(cost_step))
+            upper_cost_estimate = st.number_input("Upper estimate (£)", value=float(default_upper), step=float(cost_step))
     else:
-        fixed_cost_estimate = st.number_input("Fixed cost estimate (£)", value=1750.0, step=float(cost_step))
+        # Default fixed cost can be the average of the default range
+        default_fixed = (2 * hourly_rate + 4 * hourly_rate) / 2
+        fixed_cost_estimate = st.number_input("Fixed cost estimate (£)", value=float(default_fixed), step=float(cost_step))
 
     submitted = st.form_submit_button("Generate Documents")
 
