@@ -1,6 +1,5 @@
 Our Ref: {our_ref}
 Your Ref: {your_ref}
-Matter Number: [matter_number]
 Date: {letter_date}
 []
 {client_name_input}
@@ -10,7 +9,7 @@ Date: {letter_date}
 []
 Dear {client_name_input},
 []
-[#]Further to our recent discussions, we now write to confirm the terms under which Ramsdens Solicitors LLP [b](“Ramsdens”)[/b] will act for you. As a firm that is regulated by the Solicitors Regulation Authority, we are required to send you this letter which contains specific and prescribed information.[/p]
+[#]Further to our recent discussions, we now write to confirm the terms under which Ramsdens Solicitors LLP [b](“Ramsdens”)[/b] will act for you in relation to matter number {our_ref}. As a firm that is regulated by the Solicitors Regulation Authority, we are required to send you this letter which contains specific and prescribed information.[/p]
 []
 [#]We enclose with this letter our Terms and Conditions of Business which must be read in conjunction with this letter. These documents are a formal communication and the language used is reflective of that. We hope that you understand. Please take the time to read these documents carefully. Where there is any conflict between this letter and our Terms and Conditions of Business, the terms of this letter will prevail. Your continuing instructions in this matter will amount to your acceptance of our Terms and Conditions of Business.[/p]
 []

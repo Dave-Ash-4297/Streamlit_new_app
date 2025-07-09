@@ -56,8 +56,7 @@ def get_placeholder_map(app_inputs, firm_details):
         "[qu1_dispute_nature]": app_inputs.get('qu1_dispute_nature', ""),
         "[qu2_initial_steps]": app_inputs.get('qu2_initial_steps', ""),
         "[qu3_timescales]": app_inputs.get('qu3_timescales', ""),
-        "[qu4_initial_costs_estimate]": f"£{app_inputs.get('qu4_initial_costs_estimate', 'XX,XXX')}",
-        "[matter_number]": str(app_inputs.get('matter_number', '')),
+        "[qu4_initial_costs_estimate]": app_inputs.get('qu4_initial_costs_estimate', 'XX,XXX'),
         "{our_ref}": str(app_inputs.get('our_ref', '')),
         "{your_ref}": str(app_inputs.get('your_ref', '')),
         "{letter_date}": str(app_inputs.get('letter_date', '')),
@@ -210,7 +209,7 @@ if submitted:
         'client_name_input': client_name_input, 'client_address_line1': client_address_line1,
         'client_address_line2_conditional': client_address_line2 if client_address_line2 else "",
         'client_postcode': client_postcode, 'name': firm_details["person_responsible_name"],
-        'matter_number': our_ref, 'initial_advice_content': initial_advice_content,
+        'initial_advice_content': initial_advice_content,
         'initial_advice_method': initial_advice_method, 'initial_advice_date': initial_advice_date,
         'firm_details': firm_details
     }
