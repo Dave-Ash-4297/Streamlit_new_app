@@ -1,8 +1,300 @@
-# Client Care Letter Precedent for Ramsdens Solicitors LLP
-# Tags: [bd][/bd] for bold, [/p] for end of paragraph, [ind] for indent (1.25 cm),
-# [#] for numbered lists, [a][b] for lettered lists (0.7 cm indent), [i][ii][iii][iv][v][vi][vii] for Roman numeral lists (1.4 cm indent),
-# [indiv][corp] for client type blocks, [a1][a2][a3][a4][u1][u2][u3][u4] for court track blocks
+import streamlit as st
+from docx import Document
+from docx.shared import Pt, Cm
+from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
+import io
+from datetime import datetime
+import re
+import html
+import os
+from dotenv import load_dotenv
 
+# Load environment variables for secure configuration
+load_dotenv()
+
+# --- Helper function to sanitize inputs ---
+def sanitize_input(text):
+    return html.escape(str(text))
+
+# --- Helper function to process inline formatting and placeholders ---
+def add_runs_from_text(paragraph, text_line, app_inputs):
+    # Replace placeholders with user inputs
+    text_line = text_line.replace("[qu1_dispute_nature]", app_inputs.get('qu1_dispute_nature', ""))
+    text_line = text_line.replace("[qu2_initial_steps]", app_inputs.get('qu2_initial_steps', ""))
+    text_line = text_line.replace("[qu3_timescales]", app_inputs.get('qu3_timescales', ""))
+    text_line = text_line.replace("[qu4_initial_costs_estimate]", f"£{app_inputs.get('qu4_initial_costs_estimate', 'XX,XXX')}")
+    text_line = text_line.replace("{our_ref}", str(app_inputs.get('our_ref', '')))
+    text_line = text_line.replace("{your_ref}", str(app_inputs.get('your_ref', '')))
+    text_line = text_line.replace("{letter_date}", str(app_inputs.get('letter_date', '')))
+    text_line = text_line.replace("{client_name_input}", str(app_inputs.get('client_name_input', '')))
+    text_line = text_line.replace("{client_address_line1}", str(app_inputs.get('client_address_line1', '')))
+    text_line = text_line.replace("{client_address_line2_conditional}", str(app_inputs.get('client_address_line2_conditional', '')))
+    text_line = text_line.replace("{client_postcode}", str(app_inputs.get('client_postcode', '')))
+    text_line = text_line.replace("{name}", str(app_inputs.get('name', '')))
+
+    for key, val in app_inputs.get('firm_details', {}).items():
+        text_line = text_line.replace(f"{{{key}}}", str(val))
+
+    # Updated regex to handle new formatting tags
+    parts = re.split(r'(\[bd\]|\[/bd\]|\[u\]|\[/u\]|\[italics\]|\[/italics\]|\[ind\]|\[i\]|\[ii\]|\[iii\]|\[iv\]|\[v\]|\[vi\]|\[vii\])', text_line)
+    is_bold = False
+    is_underline = False
+    is_italic = False
+    for part in parts:
+        if not part:
+            continue
+        if part == "[bd]":
+            is_bold = True
+        elif part == "[/bd]":
+            is_bold = False
+        elif part == "[u]":
+            is_underline = True
+        elif part == "[/u]":
+            is_underline = False
+        elif part == "[italics]":
+            is_italic = True
+        elif part == "[/italics]":
+            is_italic = False
+        elif part in ["[i]", "[ii]", "[iii]", "[iv]", "[v]", "[vi]", "[vii]"]:
+            run = paragraph.add_run(f"{part[1:-1]}. ")  # Add Roman numeral with period
+            run.bold = is_bold
+            run.underline = is_underline
+            run.italic = is_italic
+            run.font.name = 'Arial'
+            run.font.size = Pt(11)
+        elif part != "[ind]":  # [ind] is handled in document generation for indentation
+            run = paragraph.add_run(part)
+            run.bold = is_bold
+            run.underline = is_underline
+            run.italic = is_italic
+            run.font.name = 'Arial'
+            run.font.size = Pt(11)
+
+# --- Helper to decide if a conditional block should be rendered ---
+def should_render_paragraph_version(p_num, p_version, app_inputs):
+    if not p_version:
+        return True
+    if p_num in ['client_identification', 'cost_recovery']:
+        is_indiv_version = (p_version == 'indiv')
+        return (app_inputs['client_type'] == "Individual" and is_indiv_version) or \
+               (app_inputs['client_type'] == "Corporate" and not is_indiv_version)
+    elif p_num == 'court_track':
+        is_allocated = app_inputs['claim_assigned']
+        track = app_inputs['selected_track']
+        if p_version == 'a1':
+            return is_allocated and track == "Small Claims Track"
+        if p_version == 'a2':
+            return is_allocated and track == "Fast Track"
+        if p_version == 'a3':
+            return is_allocated and track == "Intermediate Track"
+        if p_version == 'a4':
+            return is_allocated and track == "Multi Track"
+        if p_version == 'u1':
+            return not is_allocated and track == "Small Claims Track"
+        if p_version == 'u2':
+            return not is_allocated and track == "Fast Track"
+        if p_version == 'u3':
+            return not is_allocated and track == "Intermediate Track"
+        if p_version == 'u4':
+            return not is_allocated and track == "Multi Track"
+    return False
+
+# --- Pre-parser for precedent_content ---
+def preprocess_precedent(precedent_text, app_inputs):
+    logical_elements = []
+    current_paragraph_builder = None
+    paragraph_counter = 0  # Auto-increment for numbered paragraphs
+
+    para_tag_regex = re.compile(r'\[#\]|\[(indiv|corp|a1|a2|a3|a4|u1|u2|u3|u4)\]')
+    para_end_tag_regex = re.compile(r'\[/p\]|\[/(indiv|corp|a1|a2|a3|a4|u1|u2|u3|u4)\]')
+
+    for raw_line in precedent_text.splitlines():
+        line_to_process = raw_line.strip()
+
+        while line_to_process:
+            m_start = para_tag_regex.search(line_to_process)
+            m_end = para_end_tag_regex.search(line_to_process)
+
+            if current_paragraph_builder:
+                current_block_end_pos = -1
+                if m_end and (
+                    (m_end.group(0) == '[/p]' and not current_paragraph_builder['version']) or
+                    (m_end.group(0) == f"[/{current_paragraph_builder['version']}]" and current_paragraph_builder['version'])
+                ):
+                    current_block_end_pos = m_end.start()
+
+                if current_block_end_pos != -1:
+                    content_before_end_tag = line_to_process[:current_block_end_pos]
+                    current_paragraph_builder['lines'].append(content_before_end_tag)
+                    if current_paragraph_builder['is_selected_for_render']:
+                        logical_elements.append({
+                            'type': 'paragraph_block',
+                            'paragraph_display_number_text': f"{current_paragraph_builder['num']}.",
+                            'content_lines': current_paragraph_builder['lines'],
+                            'version': current_paragraph_builder['version']
+                        })
+                    current_paragraph_builder = None
+                    line_to_process = line_to_process[m_end.end():]
+                else:
+                    current_paragraph_builder['lines'].append(line_to_process)
+                    line_to_process = ""
+            elif m_start:
+                content_before_tag = line_to_process[:m_start.start()]
+                if content_before_tag:
+                    logical_elements.append({'type': 'raw_line', 'content': content_before_tag})
+
+                tag = m_start.group(0)
+                p_version = m_start.group(1) if m_start.group(1) else None
+                p_num = None
+                if tag == '[#]':
+                    paragraph_counter += 1
+                    p_num = str(paragraph_counter)
+                elif tag in ['[indiv]', '[corp]']:
+                    p_num = 'client_identification' if tag in ['[indiv]', '[corp]'] else 'cost_recovery'
+                elif tag in ['[a1]', '[a2]', '[a3]', '[a4]', '[u1]', '[u2]', '[u3]', '[u4]']:
+                    p_num = 'court_track'
+
+                selected = should_render_paragraph_version(p_num, p_version, app_inputs)
+                current_paragraph_builder = {
+                    'num': p_num,
+                    'version': p_version,
+                    'lines': [],
+                    'is_selected_for_render': selected,
+                    'paragraph_display_number_text': f"{p_num}." if tag == '[#]' else ""
+                }
+                line_to_process = line_to_process[m_start.end():]
+            else:
+                if line_to_process:
+                    logical_elements.append({'type': 'raw_line', 'content': line_to_process})
+                line_to_process = ""
+
+    if current_paragraph_builder:
+        st.warning(f"Unterminated paragraph block: {current_paragraph_builder['num']}"
+                   f"{'-'+current_paragraph_builder['version'] if current_paragraph_builder['version'] else ''}. "
+                   f"Content included if selected.")
+        if current_paragraph_builder['is_selected_for_render'] and current_paragraph_builder['lines']:
+            logical_elements.append({
+                'type': 'paragraph_block',
+                'paragraph_display_number_text': current_paragraph_builder['paragraph_display_number_text'],
+                'content_lines': current_paragraph_builder['lines'],
+                'version': current_paragraph_builder['version']
+            })
+    return logical_elements
+
+# --- Function to generate the initial advice document ---
+def generate_initial_advice_doc(app_inputs):
+    doc = Document()
+    style = doc.styles['Normal']
+    font = style.font
+    font.name = 'HelveticaNeueLT Pro 45 Lt'
+    font.size = Pt(11)
+
+    # Add header
+    p = doc.add_paragraph()
+    p.alignment = WD_PARAGRAPH_ALIGNMENT.LEFT
+    add_runs_from_text(p, f"Initial Advice Summary - Reference: {our_ref}", app_inputs)
+    p.paragraph_format.space_after = Pt(12)
+
+    # Add table for advice details
+    table = doc.add_table(rows=3, cols=2)
+    table.style = 'Table Grid'
+    table.autofit = True
+
+    # Row 1: Date of Advice
+    cells = table.rows[0].cells
+    cells[0].text = "Date of Advice"
+    cells[1].text = app_inputs.get('initial_advice_date', '').strftime('%d %B %Y')
+    for cell in cells:
+        cell.paragraphs[0].style.font.name = 'Arial'
+        cell.paragraphs[0].style.font.size = Pt(11)
+        cell.paragraphs[0].alignment = WD_PARAGRAPH_ALIGNMENT.LEFT
+
+    # Row 2: Method of Advice
+    cells = table.rows[1].cells
+    cells[0].text = "Method of Advice"
+    cells[1].text = app_inputs.get('initial_advice_method', '')
+    for cell in cells:
+        cell.paragraphs[0].style.font.name = 'Arial'
+        cell.paragraphs[0].style.font.size = Pt(11)
+        cell.paragraphs[0].alignment = WD_PARAGRAPH_ALIGNMENT.LEFT
+
+    # Row 3: Advice Given
+    cells = table.rows[2].cells
+    cells[0].text = "Advice Given"
+    cells[1].text = app_inputs.get('initial_advice_content', '')
+    for cell in cells:
+        cell.paragraphs[0].style.font.name = 'Arial'
+        cell.paragraphs[0].style.font.size = Pt(11)
+        cell.paragraphs[0].alignment = WD_PARAGRAPH_ALIGNMENT.LEFT
+
+    table.columns[0].width = Cm(4.5)
+    table.columns[1].width = Cm(10.0)
+
+    doc_io = io.BytesIO()
+    doc.save(doc_io)
+    doc_io.seek(0)
+    return doc_io
+
+# --- Streamlit App UI ---
+st.set_page_config(layout="wide")
+st.title("Client Care Letter Generator")
+
+# Firm details from environment variables
+firm_details = {
+    "name": os.getenv("FIRM_NAME", "Ramsdens Solicitors LLP"),
+    "short_name": os.getenv("FIRM_SHORT_NAME", "Ramsdens"),
+    "person_responsible_name": os.getenv("PERSON_RESPONSIBLE_NAME", "Paul Pinder"),
+    "person_responsible_title": os.getenv("PERSON_RESPONSIBLE_TITLE", "Senior Associate"),
+    "supervisor_name": os.getenv("SUPERVISOR_NAME", "Nick Armitage"),
+    "supervisor_title": os.getenv("SUPERVISOR_TITLE", "Partner"),
+    "person_responsible_phone": os.getenv("PERSON_RESPONSIBLE_PHONE", "01484 821558"),
+    "person_responsible_mobile": os.getenv("PERSON_RESPONSIBLE_MOBILE", "07923 250815"),
+    "person_responsible_email": os.getenv("PERSON_RESPONSIBLE_EMAIL", "paul.pinder@ramsdens.co.uk"),
+    "assistant_name": os.getenv("ASSISTANT_NAME", "Reece Collier"),
+    "supervisor_contact_for_complaints": os.getenv("SUPERVISOR_CONTACT_FOR_COMPLAINTS", "Nick Armitage on 01484 507121"),
+    "bank_name": os.getenv("BANK_NAME", "Barclays Bank PLC"),
+    "bank_address": os.getenv("BANK_ADDRESS", "17 Market Place, Huddersfield"),
+    "account_name": os.getenv("ACCOUNT_NAME", "Ramsdens Solicitors LLP Client Account"),
+    "sort_code": os.getenv("SORT_CODE", "20-43-12"),
+    "account_number": os.getenv("ACCOUNT_NUMBER", "03909026"),
+    "marketing_email": os.getenv("MARKETING_EMAIL", "dataprotection@ramsdens.co.uk"),
+    "marketing_address": os.getenv("MARKETING_ADDRESS", "Ramsdens Solicitors LLP, Oakley House, 1 Hungerford Road, Edgerton, Huddersfield, HD3 3AL")
+}
+
+st.sidebar.header("Letter Details")
+our_ref = st.sidebar.text_input("Our Reference", "PP/LEGAL/RAM001/001")
+your_ref = st.sidebar.text_input("Your Reference (if any)", "")
+letter_date = st.sidebar.date_input("Letter Date", datetime.today())
+
+st.sidebar.header("Client Information")
+client_name_input = st.sidebar.text_input("Client Full Name / Company Name", "Mr. John Smith")
+client_address_line1 = st.sidebar.text_input("Client Address Line 1", "123 Example Street")
+client_address_line2 = st.sidebar.text_input("Client Address Line 2", "SomeTown")
+client_postcode = st.sidebar.text_input("Client Postcode", "EX4 MPL")
+client_type = st.sidebar.radio("Client Type:", ("Individual", "Corporate"), key="client_type_radio")
+
+st.sidebar.header("Initial Advice Details")
+initial_advice_content = st.sidebar.text_area("Initial Advice Given", "Advised on the merits of the claim and potential next steps.", height=100)
+initial_advice_method = st.sidebar.selectbox("Method of Initial Advice", ["Phone Call", "In Person", "Teams Call"], key="advice_method_select")
+initial_advice_date = st.sidebar.date_input("Date of Initial Advice", datetime.today())
+
+st.sidebar.header("Case Details")
+claim_assigned_input = st.sidebar.radio("Is the claim already assigned to a court track?",
+                                       ("Yes", "No"), key="claim_assigned_radio")
+track_options = ["Small Claims Track", "Fast Track", "Intermediate Track", "Multi Track"]
+selected_track = st.sidebar.selectbox("Which court track applies or is anticipated?", track_options, key="track_select")
+
+st.header("Dynamic Content (Answers to Questions)")
+qu1_dispute_nature = st.text_area("Q1: Nature of the Dispute (for 'The Dispute')",
+                                  "a contractual matter related to services provided", height=75)
+qu2_initial_steps = st.text_area("Q2: Immediate Steps to be Taken (for 'the Work')",
+                                 "review the documentation you have provided and advise you on the merits of your position and potential next steps. we will also prepare an initial letter to the other side", height=150)
+qu3_timescales = st.text_area("Q3: Estimated Timescales for 'the Work'",
+                              "We estimate that the initial Work will take approximately 2-4 weeks to complete, depending on the complexity and responsiveness of other parties. We will keep you updated on progress.", height=100)
+qu4_initial_costs_estimate = st.text_input("Q4: Estimated Initial Costs for 'the Work' (e.g., 1,500)", "1,500")
+
+# --- Precedent Text ---
+precedent_content = """
 {client_name_input}
 {client_address_line1}
 {client_address_line2_conditional}
@@ -124,3 +416,228 @@ Yours sincerely[/p]
 {name}[/p]
 {person_responsible_title}[/p]
 For and on behalf of {name}[/p]
+""".strip()
+
+if st.button("Generate Documents"):
+    # Sanitize inputs
+    app_inputs = {
+        'qu1_dispute_nature': sanitize_input(qu1_dispute_nature),
+        'qu2_initial_steps': sanitize_input(qu2_initial_steps),
+        'qu3_timescales': sanitize_input(qu3_timescales),
+        'qu4_initial_costs_estimate': sanitize_input(qu4_initial_costs_estimate),
+        'client_type': client_type,
+        'claim_assigned': claim_assigned_input == "Yes",
+        'selected_track': selected_track,
+        'our_ref': sanitize_input(our_ref),
+        'your_ref': sanitize_input(your_ref),
+        'letter_date': letter_date.strftime('%d %B %Y'),
+        'client_name_input': sanitize_input(client_name_input),
+        'client_address_line1': sanitize_input(client_address_line1),
+        'client_address_line2_conditional': sanitize_input(client_address_line2) if client_address_line2 else "",
+        'client_postcode': sanitize_input(client_postcode),
+        'name': sanitize_input(firm_details["person_responsible_name"]),
+        'initial_advice_content': sanitize_input(initial_advice_content),
+        'initial_advice_method': initial_advice_method,
+        'initial_advice_date': initial_advice_date,
+        'firm_details': {k: sanitize_input(v) for k, v in firm_details.items()}
+    }
+
+    # Generate Client Care Letter
+    doc = Document()
+    style = doc.styles['Normal']
+    font = style.font
+    font.name = 'HelveticaNeueLT Pro 45 Lt'
+    font.size = Pt(11)
+
+    logical_document_elements = preprocess_precedent(precedent_content, app_inputs)
+
+    in_indiv_block = False
+    in_corp_block = False
+    active_track_block = None
+
+    lines_to_process_for_docx = []
+    for element in logical_document_elements:
+        if element['type'] == 'raw_line':
+            lines_to_process_for_docx.append({'text': element['content'], 'is_numbered_block_line': False, 'version': None})
+        elif element['type'] == 'paragraph_block':
+            first_content_line_of_block = True
+            for internal_line in element['content_lines']:
+                line_text_to_add = internal_line
+                is_this_first_numbered = False
+                if first_content_line_of_block and internal_line.strip() and element['paragraph_display_number_text']:
+                    line_text_to_add = internal_line.lstrip()
+                    is_this_first_numbered = True
+                    first_content_line_of_block = False
+                lines_to_process_for_docx.append({
+                    'text': line_text_to_add,
+                    'is_numbered_block_line': is_this_first_numbered,
+                    'version': element['version']
+                })
+
+    INDENT_FOR_IND_TAG_CM = 1.25
+    SUB_LETTER_HANGING_OFFSET_CM = 0.7
+    ROMAN_NUMERAL_INDENT_CM = 1.4
+
+    for line_item in lines_to_process_for_docx:
+        line_for_docx_processing_raw = line_item['text']
+        is_main_numbered_paragraph = line_item['is_numbered_block_line']
+        version = line_item['version']
+
+        stripped_content_for_condition_check = line_for_docx_processing_raw.strip()
+        if stripped_content_for_condition_check == "[indiv]":
+            in_indiv_block = True
+            continue
+        if stripped_content_for_condition_check == "[/indiv]":
+            in_indiv_block = False
+            continue
+        if stripped_content_for_condition_check == "[corp]":
+            in_corp_block = True
+            continue
+        if stripped_content_for_condition_check == "[/corp]":
+            in_corp_block = False
+            continue
+        track_tags = ['[a1]', '[a2]', '[a3]', '[a4]', '[u1]', '[u2]', '[u3]', '[u4]']
+        end_track_tags = ['[/a1]', '[/a2]', '[/a3]', '[/a4]', '[/u1]', '[/u2]', '[/u3]', '[/u4]']
+        is_track_start_tag = any(stripped_content_for_condition_check == tag for tag in track_tags)
+        if is_track_start_tag:
+            active_track_block = stripped_content_for_condition_check
+            continue
+        is_track_end_tag = any(stripped_content_for_condition_check == tag for tag in end_track_tags)
+        if is_track_end_tag:
+            if active_track_block and stripped_content_for_condition_check == f"[/{active_track_block[1:-1]}]":
+                active_track_block = None
+            continue
+        if in_indiv_block and app_inputs['client_type'] != "Individual":
+            continue
+        if in_corp_block and app_inputs['client_type'] != "Corporate":
+            continue
+        if active_track_block:
+            should_render_current_track_content = False
+            is_allocated = app_inputs['claim_assigned']
+            track_name = app_inputs['selected_track']
+            if active_track_block == '[a1]' and is_allocated and track_name == "Small Claims Track":
+                should_render_current_track_content = True
+            elif active_track_block == '[a2]' and is_allocated and track_name == "Fast Track":
+                should_render_current_track_content = True
+            elif active_track_block == '[a3]' and is_allocated and track_name == "Intermediate Track":
+                should_render_current_track_content = True
+            elif active_track_block == '[a4]' and is_allocated and track_name == "Multi Track":
+                should_render_current_track_content = True
+            elif active_track_block == '[u1]' and not is_allocated and track_name == "Small Claims Track":
+                should_render_current_track_content = True
+            elif active_track_block == '[u2]' and not is_allocated and track_name == "Fast Track":
+                should_render_current_track_content = True
+            elif active_track_block == '[u3]' and not is_allocated and track_name == "Intermediate Track":
+                should_render_current_track_content = True
+            elif active_track_block == '[u4]' and not is_allocated and track_name == "Multi Track":
+                should_render_current_track_content = True
+            if not should_render_current_track_content:
+                continue
+
+        line_for_docx_processing = line_for_docx_processing_raw.strip()
+        if line_for_docx_processing == "[]":
+            if doc.paragraphs:
+                doc.paragraphs[-1].paragraph_format.space_after = Pt(12)
+            continue
+        elif not line_for_docx_processing:
+            if doc.paragraphs:
+                doc.paragraphs[-1].paragraph_format.space_after = Pt(12)
+            continue
+
+        text_content_for_runs = line_for_docx_processing
+        current_paragraph_style_name = 'Normal'
+        space_after_val_pt = Pt(0)
+        current_format_type = "normal"
+
+        original_line_had_ind_tag = text_content_for_runs.startswith("[ind]")
+        if original_line_had_ind_tag:
+            text_content_for_runs = text_content_for_runs.replace("[ind]", "", 1).lstrip()
+            current_format_type = "ind_block_only"
+
+        sub_letter_match = re.match(r'^\[([a-zA-Z])\](.*)', text_content_for_runs)
+        if sub_letter_match:
+            letter = sub_letter_match.group(1)
+            rest_of_text = sub_letter_match.group(2).lstrip()
+            text_content_for_runs = f"({letter.lower()})\t{rest_of_text}"
+            current_format_type = "sub_letter"
+        elif is_main_numbered_paragraph:
+            current_paragraph_style_name = 'List Number'
+            current_format_type = "main_numbered_auto"
+
+        if not text_content_for_runs.strip() and not (current_paragraph_style_name in ['ListBullet', 'List Number'] and not text_content_for_runs):
+            if current_paragraph_style_name == 'Normal':
+                continue
+
+        p = doc.add_paragraph(style=current_paragraph_style_name)
+        pf = p.paragraph_format
+        pf.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
+        pf.tab_stops.clear_all()
+
+        if current_format_type == "main_numbered_auto":
+            pass
+        elif current_format_type == "sub_letter":
+            if original_line_had_ind_tag:
+                text_body_indent_cm = INDENT_FOR_IND_TAG_CM + SUB_LETTER_HANGING_OFFSET_CM
+                pf.left_indent = Cm(text_body_indent_cm)
+                pf.first_line_indent = Cm(-SUB_LETTER_HANGING_OFFSET_CM)
+                pf.tab_stops.add_tab_stop(Cm(text_body_indent_cm))
+            else:
+                pf.left_indent = Cm(SUB_LETTER_HANGING_OFFSET_CM)
+                pf.first_line_indent = Cm(-SUB_LETTER_HANGING_OFFSET_CM)
+                pf.tab_stops.add_tab_stop(Cm(SUB_LETTER_HANGING_OFFSET_CM))
+        elif current_format_type == "ind_block_only":
+            pf.left_indent = Cm(INDENT_FOR_IND_TAG_CM)
+            pf.first_line_indent = Cm(0)
+            pf.tab_stops.add_tab_stop(Cm(INDENT_FOR_IND_TAG_CM))
+        elif current_format_type == "normal":
+            pass
+
+        pf.space_after = space_after_val_pt
+        add_runs_from_text(p, text_content_for_runs, app_inputs)
+
+    if doc.paragraphs:
+        if doc.paragraphs[-1].paragraph_format.space_after == Pt(0):
+            doc.paragraphs[-1].paragraph_format.space_after = Pt(6)
+
+    doc_io = io.BytesIO()
+    doc.save(doc_io)
+    doc_io.seek(0)
+
+    # Generate Initial Advice Document
+    advice_doc_io = generate_initial_advice_doc(app_inputs)
+
+    # Upload to Nextcloud (optional, configure as needed)
+    try:
+        import requests
+        from requests.auth import HTTPBasicAuth
+
+        def upload_to_nextcloud(file_io, filename, nextcloud_url, username, password, folder_path):
+            url = f"{nextcloud_url}/remote.php/dav/files/{username}/{folder_path}/{filename}"
+            headers = {'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'}
+            response = requests.put(url, data=file_io.getvalue(), auth=HTTPBasicAuth(username, password), headers=headers)
+            return response.status_code == 201
+
+        nextcloud_url = os.getenv("NEXTCLOUD_URL", "https://your-helios64-nextcloud.com")
+        username = os.getenv("NEXTCLOUD_USERNAME", "your_username")
+        password = os.getenv("NEXTCLOUD_PASSWORD", "your_password")
+        folder_path = "ClientDocuments"
+        client_name_safe = client_name_input.replace(' ', '_')
+        upload_to_nextcloud(doc_io, f"Client_Care_Letter_{client_name_safe}.docx", nextcloud_url, username, password, folder_path)
+        upload_to_nextcloud(advice_doc_io, f"Initial_Advice_Summary_{client_name_safe}.docx", nextcloud_url, username, password, folder_path)
+        st.success("Documents uploaded to Nextcloud successfully!")
+    except Exception as e:
+        st.warning(f"Failed to upload to Nextcloud: {str(e)}")
+
+    st.success("Documents Generated!")
+    st.download_button(
+        label="Download Client Care Letter",
+        data=doc_io,
+        file_name=f"Client_Care_Letter_{client_name_safe}.docx",
+        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+    st.download_button(
+        label="Download Initial Advice Summary",
+        data=advice_doc_io,
+        file_name=f"Initial_Advice_Summary_{client_name_safe}.docx",
+        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
