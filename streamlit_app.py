@@ -103,13 +103,19 @@ def add_formatted_runs(paragraph, text_line, placeholder_map):
             text_line = str(text_line)
             logger.warning("Converted non-string text_line to string: %s", text_line)
 
+        # Log the placeholder_map for debugging
+        logger.debug("Placeholder map in add_formatted_runs: %s", placeholder_map)
+
         # Replace placeholders with their values
+        processed_text = text_line
         for placeholder, value in placeholder_map.items():
             placeholder_pattern = f"{{{placeholder}}}"
-            text_line = text_line.replace(placeholder_pattern, str(value))
+            if placeholder_pattern in processed_text:
+                logger.debug("Replacing placeholder '%s' with value '%s'", placeholder_pattern, value)
+                processed_text = processed_text.replace(placeholder_pattern, str(value))
         
         # Handle formatting tags
-        parts = re.split(r'(\[bd\]|\[/bd\]|\[italics\]|\[/italics\]|\[u\]|\[/u\]|\[underline\]|\[/underline\])', text_line)
+        parts = re.split(r'(\[bd\]|\[/bd\]|\[italics\]|\[/italics\]|\[u\]|\[/u\]|\[underline\]|\[/underline\])', processed_text)
         is_bold = is_italic = is_underline = False
         for part in parts:
             if not part:
@@ -133,7 +139,7 @@ def add_formatted_runs(paragraph, text_line, placeholder_map):
                 run.underline = is_underline
                 run.font.name = 'Arial'
                 run.font.size = Pt(11)
-        logger.debug("Processed formatted runs for text: %s", text_line)
+        logger.debug("Processed formatted runs for text: %s", processed_text)
     except Exception as e:
         logger.error("Error in add_formatted_runs for text '%s': %s", text_line, str(e))
         raise
@@ -162,6 +168,9 @@ def should_render_track_block(tag, claim_assigned, selected_track):
 def generate_initial_advice_doc(app_inputs):
     """Generates the Initial Advice Summary Word document."""
     try:
+        # Log app_inputs for debugging
+        logger.debug("App inputs in generate_initial_advice_doc: %s", app_inputs)
+
         doc = Document()
         style = doc.styles['Normal']
         style.font.name = 'HelveticaNeueLT Pro 45 Lt'
@@ -170,14 +179,20 @@ def generate_initial_advice_doc(app_inputs):
         p = doc.add_paragraph()
         p.alignment = WD_PARAGRAPH_ALIGNMENT.LEFT
         placeholder_map = get_placeholder_map(app_inputs, app_inputs['firm_details'])
-        add_formatted_runs(p, "Initial Advice Summary - Matter Number: {matter_number}")
+
+        # Verify matter_number exists in placeholder_map
+        if 'matter_number' not in placeholder_map:
+            logger.error("matter_number not found in placeholder_map")
+            raise ValueError("matter_number not found in placeholder_map")
+
+        add_formatted_runs(p, "Initial Advice Summary - Matter Number: {matter_number}", placeholder_map)
         p.paragraph_format.space_after = Pt(12)
 
         table = doc.add_table(rows=3, cols=2)
         table.style = 'Table Grid'
         table.autofit = True
         rows = [
-            ("Date of Advice", app_inputs.get('initial_advice_date', '').strftime('%d/%m/%Y')),
+            ("Date of Advice", app_inputs.get('initial_advice_date', '').strftime('%d/%m/%Y') if app_inputs.get('initial_advice_date') else ''),
             ("Method of Advice", app_inputs.get('initial_advice_method', '')),
             ("Advice Given", app_inputs.get('initial_advice_content', ''))
         ]
@@ -600,7 +615,7 @@ if submitted:
         doc = process_precedent_text(precedent_content, app_inputs, placeholder_map)
         logger.info("Client Care Letter document processed successfully.")
     except Exception as e:
-        st.error(f"Error processing precedent text: {str(e)}")
+        st.error(f"Error processing precedent text: %s", str(e))
         logger.error("Error processing precedent text: %s", str(e))
         raise
 
