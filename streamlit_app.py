@@ -531,8 +531,8 @@ with st.form("input_form"):
     st.header("1. Letter & Client Details")
     col1, col2 = st.columns(2)
     with col1:
-        our_ref = st.text_input("Our Reference", "PP/LEGAL/RAM001/001")
-        your_ref = st.text_input("Your Reference (if any)", "")
+        our_ref = st.text_input("Our Reference", "PDP/10011/001")
+        your_ref = st.text_input("Your Reference (if any)", "REF")
         letter_date = st.date_input("Letter Date", datetime.today())
     with col2:
         client_name_input = st.text_input("Client Full Name / Company Name", "Mr. John Smith")
