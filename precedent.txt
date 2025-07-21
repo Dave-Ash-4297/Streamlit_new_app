@@ -38,7 +38,7 @@ Dear {client_name_input},
 
 [indiv]
 [#]To comply with the individual identity requirement, you have two options:
-[a]We can carry out a remote ID verification of you and your ID documents using a SmartSearch facility. If you would like us to verify your identification remotely please provide your name, address, date of birth, personal email and mobile number. Once the search has been undertaken, SmartSearch will send you a text or email with a link to use on your smartphone which will require you to take a photo of your ID document and then yourself which it will then upload to its system that will check the document, provide us with a copy, and verify that you are the person on the ID document. The process is quick and easy, and avoids you having to send in ID documents to us. Or;
+[a]We can carry out a remote ID verification of you and your ID documents using a SmartSearch facility. If you would like us to verify your identification remotely please provide your name, address, date of birth, personal email and mobile number. Once the search has been undertaken, SmartSearch will send you a text or email with a link to use on your smartphone which will require you to take a photo of your ID document and then yourself which it will then upload to its system that will check the document, provide us with a copy, and verify that you are the person on the ID document. Or;
 [b]You can provide us with two documents referred to in the list below, one photographic and one showing your current address. If you are local to any of our offices please call with your original documents and they will be copied whilst you wait and the copies forwarded to us:
 [i]Current signed passport;
 [ii]Household utility bill;
@@ -218,6 +218,7 @@ Dear {client_name_input},
 [c]Writing to Marketing Department at: {marketing_address}.
 
 Yours sincerely,
+
 
 {name}
 Solicitor
