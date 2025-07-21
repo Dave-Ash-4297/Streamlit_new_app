@@ -151,7 +151,7 @@ def generate_initial_advice_doc(app_inputs):
     p = doc.add_paragraph()
     p.alignment = WD_PARAGRAPH_ALIGNMENT.LEFT
     placeholder_map = get_placeholder_map(app_inputs, app_inputs['firm_details'])
-    add_formatted_runs(p, f"Initial Advice Summary - Matter Number: {placeholder_map.get('matter_number', '')}")
+    add_formatted_runs(p, "Initial Advice Summary - Matter Number: {matter_number}")
     p.paragraph_format.space_after = Pt(12)
 
     table = doc.add_table(rows=3, cols=2)
@@ -408,6 +408,7 @@ st.markdown("""
         border-radius: 5px;
         padding: 10px 20px;
         border: 1px solid #005A9E;
+Made by Grok, created by xAI
         font-size: 16px;
     }
     .stButton>button:hover {
