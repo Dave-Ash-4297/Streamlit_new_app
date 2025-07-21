@@ -4,7 +4,7 @@ from docx.shared import Pt, Cm
 from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
 from docx.enum.style import WD_STYLE_TYPE
 from docx.oxml.ns import qn
-from docx.oxml import OxmlElement # Still useful for some XML additions if needed, but carefully
+from docx.oxml import OxmlElement
 import io
 from datetime import datetime
 import re
@@ -17,15 +17,12 @@ logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %
 logger = logging.getLogger(__name__)
 
 # --- Constants ---
-INDENT_FOR_IND_TAG_CM = 1.25 # Base indent for paragraphs marked with [ind]
-
-# Indentation for list levels (these are for the *text* start)
-MAIN_LIST_TEXT_START_CM = 1.0 # Where text should start for 1., •
-SUB_LIST_TEXT_START_CM = 1.8 # Where text should start for (a), (i)
-
-# Marker offsets (how far the marker is to the left of the text start)
-# These are conceptual, the style will handle actual hanging indent
-MARKER_OFFSET_CM = 0.6 # A common offset for bullet/number markers
+INDENT_FOR_IND_TAG_CM = 1.25  # Base indent for paragraphs marked with [ind]
+MAIN_LIST_TEXT_START_CM = 0.7  # Text start for numbered paragraphs ([#])
+MARKER_OFFSET_CM = 0.7  # Hanging indent for number marker
+SUB_LIST_TEXT_START_CM = 1.4  # Text start for lettered lists ([a], [b], etc.)
+SUB_ROMAN_TEXT_START_CM = 2.1  # Text start for Roman numeral lists ([i], [ii], etc.)
+BULLET_TEXT_START_CM = 1.0  # Text start for bullet lists ([bp])
 
 # --- Utility Functions ---
 def sanitize_input(text):
@@ -84,7 +81,7 @@ def get_placeholder_map(app_inputs, firm_details):
         'qu2_initial_steps': app_inputs.get('qu2_initial_steps', ''),
         'qu3_timescales': app_inputs.get('qu3_timescales', ''),
         'qu4_initial_costs_estimate': app_inputs.get('qu4_initial_costs_estimate', 'XX,XXX'),
-        'fee_table': app_inputs.get('fee_table', "Fee table not provided"),
+        'fee_table': app_inputs.get('fee_table', ["Fee table not provided"]),
         'our_ref': str(app_inputs.get('our_ref', '')),
         'your_ref': str(app_inputs.get('your_ref', '')),
         'letter_date': str(app_inputs.get('letter_date', '')),
@@ -112,20 +109,19 @@ def add_formatted_runs(paragraph, text_line, placeholder_map):
             placeholder_pattern = f"{{{placeholder}}}"
             if placeholder_pattern in processed_text:
                 processed_text = processed_text.replace(placeholder_pattern, str(value))
+            placeholder_pattern_alt = f"[{placeholder}]"
+            if placeholder_pattern_alt in processed_text:
+                processed_text = processed_text.replace(placeholder_pattern_alt, str(value))
         
-        if '{' in processed_text and '}' in processed_text:
-            logger.warning("Unprocessed curly brace placeholders in text after replacement: %s", processed_text)
+        if ('{' in processed_text and '}' in processed_text) or ('[' in processed_text and ']' in processed_text):
+            logger.warning("Unprocessed placeholders in text after replacement: %s", processed_text)
         
         parts = re.split(r'(\[bd\]|\[/bd\]|\[italics\]|\[/italics\]|\[u\]|\[/u\]|\[underline\]|\[/underline\])', processed_text)
-        
-        is_bold = False
-        is_italic = False
-        is_underline = False
+        is_bold = is_italic = is_underline = False
 
         for part in parts:
             if not part:
                 continue
-
             if part == "[bd]":
                 is_bold = True
             elif part == "[/bd]":
@@ -145,9 +141,9 @@ def add_formatted_runs(paragraph, text_line, placeholder_map):
                 run.underline = is_underline
                 run.font.name = 'Arial'
                 run.font.size = Pt(11)
-        logger.debug(f"Formatted runs added for: '{text_line}' -> '{processed_text}'")
+        logger.debug("Formatted runs added for: '%s' -> '%s'", text_line, processed_text)
     except Exception as e:
-        logger.error(f"Error in add_formatted_runs for text '{text_line}': {str(e)}")
+        logger.error("Error in add_formatted_runs for text '%s': %s", text_line, str(e))
         raise
 
 # --- Conditional Block Logic ---
@@ -165,12 +161,11 @@ def should_render_track_block(tag, claim_assigned, selected_track):
     }
     expected = tag_map.get(tag)
     if not expected:
-        logger.warning(f"Unknown track tag encountered: {tag}. Skipping rendering for safety.")
+        logger.warning("Unknown track tag encountered: %s. Skipping rendering.", tag)
         return False
-    
     expected_assignment, expected_track = expected
-    result = (claim_assigned == expected_assignment) and (selected_track == expected_track)
-    logger.debug(f"Track block '{tag}' rendering decision: {result} (claim_assigned={claim_assigned}, selected_track='{selected_track}')")
+    result = claim_assigned == expected_assignment and selected_track == expected_track
+    logger.debug("Track block '%s' rendering decision: %s (claim_assigned=%s, selected_track='%s')", tag, result, claim_assigned, selected_track)
     return result
 
 # --- Document Generation Functions ---
@@ -178,9 +173,8 @@ def generate_initial_advice_doc(app_inputs):
     """Generates the Initial Advice Summary Word document."""
     try:
         logger.debug("Generating Initial Advice Summary document.")
-
         if 'our_ref' not in app_inputs or not app_inputs['our_ref']:
-            logger.error("Missing or empty 'our_ref' in app_inputs for Initial Advice Summary.")
+            logger.error("Missing or empty 'our_ref' in app_inputs.")
             raise ValueError("Missing or empty 'our_ref' in app_inputs.")
 
         doc = Document()
@@ -196,7 +190,6 @@ def generate_initial_advice_doc(app_inputs):
         table = doc.add_table(rows=3, cols=2)
         table.style = 'Table Grid'
         table.autofit = True
-        
         rows_data = [
             ("Date of Advice", app_inputs.get('initial_advice_date', '').strftime('%d/%m/%Y') if app_inputs.get('initial_advice_date') else ''),
             ("Method of Advice", app_inputs.get('initial_advice_method', '')),
@@ -207,22 +200,21 @@ def generate_initial_advice_doc(app_inputs):
             cells[0].text = label
             cells[1].text = value
             for cell in cells:
-                for para_in_cell in cell.paragraphs:
-                    for run_in_para in para_in_cell.runs:
-                        run_in_para.font.name = 'Arial'
-                        run_in_para.font.size = Pt(11)
+                for para in cell.paragraphs:
+                    for run in para.runs:
+                        run.font.name = 'Arial'
+                        run.font.size = Pt(11)
                 cell.paragraphs[0].alignment = WD_PARAGRAPH_ALIGNMENT.LEFT
-        
         table.columns[0].width = Cm(4.5)
         table.columns[1].width = Cm(10.0)
 
         doc_io = io.BytesIO()
         doc.save(doc_io)
         doc_io.seek(0)
-        logger.info("Initial Advice Summary document successfully generated.")
+        logger.info("Initial Advice Summary document generated.")
         return doc_io
     except Exception as e:
-        logger.error(f"Failed to generate Initial Advice Summary document: {str(e)}")
+        logger.error("Failed to generate Initial Advice Summary document: %s", str(e))
         raise
 
 def generate_fee_table(hourly_rate, client_type):
@@ -241,51 +233,40 @@ def generate_fee_table(hourly_rate, client_type):
     return table_content_lines
 
 def preprocess_precedent(precedent_content, app_inputs):
-    """
-    Preprocesses the precedent text into a list of logical document elements.
-    Each element is a dict containing its 'type', 'content_lines' (list of strings),
-    and 'block_tag' (for conditional rendering).
-    """
+    """Preprocesses the precedent text into a list of logical document elements."""
     logical_elements = []
     lines = precedent_content.splitlines()
     i = 0
-    
-    current_paragraph_lines = [] # Accumulates lines for a single logical paragraph/item
-    current_block_tag = None # e.g., 'indiv', 'corp', 'a1', 'u1' for conditional sections
+    current_paragraph_lines = []
+    current_block_tag = None
 
     def add_current_paragraph_block(block_type_to_assign='general_paragraph'):
         nonlocal current_paragraph_lines, current_block_tag
         if current_paragraph_lines:
-            cleaned_lines_for_block = []
-            for line_in_block in current_paragraph_lines:
-                # Stripping [/p] if it exists, as spacing is handled by docx.paragraph_format.space_after
-                line_in_block = line_in_block.replace('[/p]', '').strip() 
-                cleaned_lines_for_block.append(line_in_block)
-
+            cleaned_lines = [line.replace('[/p]', '').strip() for line in current_paragraph_lines]
             logical_elements.append({
                 'type': block_type_to_assign,
-                'content_lines': cleaned_lines_for_block,
+                'content_lines': cleaned_lines,
                 'block_tag': current_block_tag
             })
-            current_paragraph_lines = [] # Reset for next block
+            current_paragraph_lines = []
 
     while i < len(lines):
-        line = lines[i] # Use original line for content, stripped_line for tag checking
+        line = lines[i]
         stripped_line = line.strip()
-
-        logger.debug(f"Pre-processing line {i}: '{stripped_line}'")
+        logger.debug("Pre-processing line %d: '%s'", i, stripped_line)
 
         match_start_tag = re.match(r'\[(indiv|corp|a[1-4]|u[1-4])\]', stripped_line)
         match_end_tag = re.match(r'\[/(indiv|corp|a[1-4]|u[1-4])\]', stripped_line)
-        
+
         if match_start_tag:
             add_current_paragraph_block()
             current_block_tag = match_start_tag.group(1)
-            logger.debug(f"Detected START conditional block tag: {current_block_tag}")
+            logger.debug("Detected START conditional block tag: %s", current_block_tag)
         elif match_end_tag:
             add_current_paragraph_block()
             current_block_tag = None
-            logger.debug(f"Detected END conditional block tag: {match_end_tag.group(1)}")
+            logger.debug("Detected END conditional block tag: %s", match_end_tag.group(1))
         elif stripped_line == '[FEE_TABLE_PLACEHOLDER]':
             add_current_paragraph_block()
             logical_elements.append({
@@ -309,7 +290,7 @@ def preprocess_precedent(precedent_content, app_inputs):
                 'content_lines': [stripped_line.replace('[u]', '', 1).strip()],
                 'block_tag': current_block_tag
             })
-            logger.debug(f"Detected heading: '{stripped_line}'")
+            logger.debug("Detected heading: '%s'", stripped_line)
         elif stripped_line.startswith('[#]'):
             add_current_paragraph_block()
             logical_elements.append({
@@ -317,23 +298,23 @@ def preprocess_precedent(precedent_content, app_inputs):
                 'content_lines': [stripped_line.replace('[#]', '', 1).lstrip()],
                 'block_tag': current_block_tag
             })
-            logger.debug(f"Detected numbered list item: '{stripped_line}'")
+            logger.debug("Detected numbered list item: '%s'", stripped_line)
         elif re.match(r'^\[([a-zA-Z])\]', stripped_line):
             add_current_paragraph_block()
             logical_elements.append({
                 'type': 'letter_list_item',
-                'content_lines': [stripped_line], # Keep original tag for formatting
+                'content_lines': [stripped_line],
                 'block_tag': current_block_tag
             })
-            logger.debug(f"Detected lettered list item: '{stripped_line}'")
+            logger.debug("Detected lettered list item: '%s'", stripped_line)
         elif re.match(r'^\[(i{1,3}|iv|v|vi|vii)\]', stripped_line):
             add_current_paragraph_block()
             logical_elements.append({
                 'type': 'roman_list_item',
-                'content_lines': [stripped_line], # Keep original tag for formatting
+                'content_lines': [stripped_line],
                 'block_tag': current_block_tag
             })
-            logger.debug(f"Detected roman list item: '{stripped_line}'")
+            logger.debug("Detected roman list item: '%s'", stripped_line)
         elif stripped_line.startswith('[bp]'):
             add_current_paragraph_block()
             logical_elements.append({
@@ -341,318 +322,237 @@ def preprocess_precedent(precedent_content, app_inputs):
                 'content_lines': [stripped_line.replace('[bp]', '', 1).lstrip()],
                 'block_tag': current_block_tag
             })
-            logger.debug(f"Detected bullet list item: '{stripped_line}'")
+            logger.debug("Detected bullet list item: '%s'", stripped_line)
         elif not stripped_line:
             add_current_paragraph_block()
             logger.debug("Detected empty line (natural paragraph break).")
         else:
             current_paragraph_lines.append(line)
-            
+
         i += 1
 
     add_current_paragraph_block()
-
-    logger.debug(f"Pre-processing complete. Total logical elements: {len(logical_elements)}")
+    logger.debug("Pre-processing complete. Total logical elements: %d", len(logical_elements))
     return logical_elements
 
-
 def process_precedent_text(precedent_content, app_inputs, placeholder_map):
-    """
-    Processes the parsed precedent text elements and adds them to a Word document.
-    """
+    """Processes the parsed precedent text elements and adds them to a Word document."""
     try:
         doc = Document()
-        # Set default font for 'Normal' style
         doc.styles['Normal'].font.name = 'Arial'
         doc.styles['Normal'].font.size = Pt(11)
-        doc.styles['Normal'].paragraph_format.space_after = Pt(12) # Default space for normal paragraphs
+        doc.styles['Normal'].paragraph_format.space_after = Pt(12)
 
-        # Create/Get numbering definitions for lists
-        # python-docx doesn't expose numbering_part for direct xml manipulation easily.
-        # Instead, we define styles and let docx generate the underlying numbering.
-        # For true continuity and complex lists, external template might be better,
-        # but for simple incrementing lists, custom styles can work if linked to basic numbering properties.
-
-        # Ensure a default numbering for each list type
-        # For simplicity and to avoid the `numbering_part` error, we will define
-        # specific styles for each list type and manually set `numId` and `ilvl`
-        # if the style itself doesn't automatically trigger a new list.
-
+        # Define custom styles
         styles = doc.styles
-
-        # Helper to set basic paragraph and font properties for a list style
         def setup_list_style(style_name, base_style_name='Normal'):
             if style_name not in styles:
                 new_style = styles.add_style(style_name, WD_STYLE_TYPE.PARAGRAPH)
                 new_style.base_style = styles[base_style_name]
-                new_style.paragraph_format.space_after = Pt(6) # Smaller space for list items
+                new_style.paragraph_format.space_after = Pt(6)
             return styles[style_name]
 
-
-        # Define the styles
         numbered_style = setup_list_style('NumberedListCustom')
         letter_style = setup_list_style('LetterListCustom')
         roman_style = setup_list_style('RomanListCustom')
         bullet_style = setup_list_style('BulletListCustom')
 
-        # This is where we need to ensure numbering is properly set up.
-        # Python-docx does not provide a high-level API for creating new numbering definitions
-        # dynamically beyond basic built-in styles or using templates.
-        # The common workaround for custom numbering is to modify the XML directly,
-        # but the `numbering_part` error indicates limitations.
-        #
-        # A more stable approach without a template requires:
-        # 1. Manually adding abstractNum and num elements if they don't exist.
-        # 2. Setting the pPr/numPr/numId and pPr/numPr/ilvl on each paragraph.
-        #
-        # Let's create a *single* abstract numbering definition and reuse its ID for all list types,
-        # but use different ilvl (level) and numFmt (format) for each. This is a common strategy.
-        
-        # --- Create a shared abstract numbering definition if not already present ---
-        # This part requires careful XML manipulation or using docx.api._document._RelationshipPart
-        # The previous error "AttributeError: 'Document' object has no attribute 'numbering_part'"
-        # indicated that directly accessing doc.part.document.numbering_part.element is problematic.
-        # The correct way to get to the numbering part's XML root is often through the document part.
-        
-        document_part = doc.part
-        if not hasattr(document_part, 'numbering_part'): # Check if it's there, should be for new doc
-            # If for some reason it's missing (unlikely for a new docx.Document()), then create it
-            from docx.opc.part import PartFactory
-            from docx.opc.package import Package
-            from docx.parts.numbering import NumberingPart
-            # This is complex and usually handled by docx.__init__
-            logger.error("Document does not have a numbering_part. This is unexpected for a new document.")
-            # For robustness, we could try to add it, but it implies a deeper issue.
-            # Sticking to standard API or a template is best.
-            raise Exception("Document's numbering part not found, cannot apply custom lists.")
-
-
-        # Get the numbering XML element
+        # Create a single numbering definition for all lists
         numbering_elm = doc.part.numbering_part.element
-        
-        # Find or create abstractNum for our custom lists
-        # Use a unique ID that won't clash.
-        abstract_num_id = 100 # Arbitrary starting ID
-        num_id_counter = 1 # Global counter for numbering instances
+        abstract_num_id = 100
+        num_instance_id = 1
 
-        # Define levels within the abstract numbering
-        # Level 0 for [#] - decimal
-        # Level 1 for [a] - lowerLetter
-        # Level 2 for [i] - lowerRoman
-        # Level 3 for [bp] - bullet
-        
-        # Check if our abstract numbering definition already exists to avoid duplication
-        # This is simplified; a real check would iterate existing abstractNums
         if not numbering_elm.xpath(f'w:abstractNum[@w:abstractNumId="{abstract_num_id}"]', namespaces=numbering_elm.nsmap):
-            new_abstract_num = OxmlElement('w:abstractNum', nsmap=numbering_elm.nsmap)
-            new_abstract_num.set(qn('w:abstractNumId'), str(abstract_num_id))
-            new_abstract_num.set(qn('w:nsid'), '{0:08X}'.format(abstract_num_id)) # unique NSID
+            abstract_num = OxmlElement('w:abstractNum')
+            abstract_num.set(qn('w:abstractNumId'), str(abstract_num_id))
+            abstract_num.set(qn('w:nsid'), '{0:08X}'.format(abstract_num_id))
 
-            # Define Level 0 (for [#] - numbered)
-            lvl0 = OxmlElement('w:lvl', nsmap=numbering_elm.nsmap)
+            # Level 0: Numbered ([#])
+            lvl0 = OxmlElement('w:lvl')
             lvl0.set(qn('w:ilvl'), '0')
-            lvl0.append(OxmlElement('w:numFmt', nsmap=numbering_elm.nsmap, val='decimal'))
-            lvl0.append(OxmlElement('w:lvlText', nsmap=numbering_elm.nsmap, val='%1.'))
-            lvl0.append(OxmlElement('w:lvlJc', nsmap=numbering_elm.nsmap, val='left'))
-            
-            pPr0 = OxmlElement('w:pPr', nsmap=numbering_elm.nsmap)
-            ind0 = OxmlElement('w:ind', nsmap=numbering_elm.nsmap, left=str(Cm(MAIN_LIST_TEXT_START_CM).twips), hanging=str(Cm(MARKER_OFFSET_CM).twips))
+            lvl0.append(OxmlElement('w:numFmt', val='decimal'))
+            lvl0.append(OxmlElement('w:lvlText', val='%1.'))
+            lvl0.append(OxmlElement('w:lvlJc', val='left'))
+            pPr0 = OxmlElement('w:pPr')
+            ind0 = OxmlElement('w:ind', left=str(Cm(MAIN_LIST_TEXT_START_CM).twips), hanging=str(Cm(MARKER_OFFSET_CM).twips))
             pPr0.append(ind0)
             lvl0.append(pPr0)
-            new_abstract_num.append(lvl0)
+            abstract_num.append(lvl0)
 
-            # Define Level 1 (for [a] - lowerLetter)
-            lvl1 = OxmlElement('w:lvl', nsmap=numbering_elm.nsmap)
+            # Level 1: Lettered ([a], [b], etc.)
+            lvl1 = OxmlElement('w:lvl')
             lvl1.set(qn('w:ilvl'), '1')
-            lvl1.append(OxmlElement('w:numFmt', nsmap=numbering_elm.nsmap, val='lowerLetter'))
-            lvl1.append(OxmlElement('w:lvlText', nsmap=numbering_elm.nsmap, val='(%1)')) # Use %1 for current level
-            lvl1.append(OxmlElement('w:lvlJc', nsmap=numbering_elm.nsmap, val='left'))
-            pPr1 = OxmlElement('w:pPr', nsmap=numbering_elm.nsmap)
-            ind1 = OxmlElement('w:ind', nsmap=numbering_elm.nsmap, left=str(Cm(SUB_LIST_TEXT_START_CM).twips), hanging=str(Cm(MARKER_OFFSET_CM).twips))
+            lvl1.append(OxmlElement('w:numFmt', val='lowerLetter'))
+            lvl1.append(OxmlElement('w:lvlText', val='(%1)'))
+            lvl1.append(OxmlElement('w:lvlJc', val='left'))
+            pPr1 = OxmlElement('w:pPr')
+            ind1 = OxmlElement('w:ind', left=str(Cm(SUB_LIST_TEXT_START_CM).twips), hanging=str(Cm(MARKER_OFFSET_CM).twips))
             pPr1.append(ind1)
             lvl1.append(pPr1)
-            new_abstract_num.append(lvl1)
+            abstract_num.append(lvl1)
 
-            # Define Level 2 (for [i] - lowerRoman)
-            lvl2 = OxmlElement('w:lvl', nsmap=numbering_elm.nsmap)
+            # Level 2: Roman ([i], [ii], etc.)
+            lvl2 = OxmlElement('w:lvl')
             lvl2.set(qn('w:ilvl'), '2')
-            lvl2.append(OxmlElement('w:numFmt', nsmap=numbering_elm.nsmap, val='lowerRoman'))
-            lvl2.append(OxmlElement('w:lvlText', nsmap=numbering_elm.nsmap, val='(%1)')) # Use %1 for current level
-            lvl2.append(OxmlElement('w:lvlJc', nsmap=numbering_elm.nsmap, val='left'))
-            pPr2 = OxmlElement('w:pPr', nsmap=numbering_elm.nsmap)
-            ind2 = OxmlElement('w:ind', nsmap=numbering_elm.nsmap, left=str(Cm(SUB_LIST_TEXT_START_CM + 0.8).twips), hanging=str(Cm(MARKER_OFFSET_CM).twips)) # Deeper indent for roman
+            lvl2.append(OxmlElement('w:numFmt', val='lowerRoman'))
+            lvl2.append(OxmlElement('w:lvlText', val='(%1)'))
+            lvl2.append(OxmlElement('w:lvlJc', val='left'))
+            pPr2 = OxmlElement('w:pPr')
+            ind2 = OxmlElement('w:ind', left=str(Cm(SUB_ROMAN_TEXT_START_CM).twips), hanging=str(Cm(MARKER_OFFSET_CM).twips))
             pPr2.append(ind2)
             lvl2.append(pPr2)
-            new_abstract_num.append(lvl2)
+            abstract_num.append(lvl2)
 
-            # Define Level 3 (for [bp] - bullet)
-            lvl3 = OxmlElement('w:lvl', nsmap=numbering_elm.nsmap)
+            # Level 3: Bullet ([bp])
+            lvl3 = OxmlElement('w:lvl')
             lvl3.set(qn('w:ilvl'), '3')
-            lvl3.append(OxmlElement('w:numFmt', nsmap=numbering_elm.nsmap, val='bullet'))
-            lvl3.append(OxmlElement('w:lvlText', nsmap=numbering_elm.nsmap, val='•'))
-            lvl3.append(OxmlElement('w:lvlJc', nsmap=numbering_elm.nsmap, val='left'))
-            pPr3 = OxmlElement('w:pPr', nsmap=numbering_elm.nsmap)
-            ind3 = OxmlElement('w:ind', nsmap=numbering_elm.nsmap, left=str(Cm(MAIN_LIST_TEXT_START_CM).twips), hanging=str(Cm(MARKER_OFFSET_CM).twips))
+            lvl3.append(OxmlElement('w:numFmt', val='bullet'))
+            lvl3.append(OxmlElement('w:lvlText', val='•'))
+            lvl3.append(OxmlElement('w:lvlJc', val='left'))
+            pPr3 = OxmlElement('w:pPr')
+            ind3 = OxmlElement('w:ind', left=str(Cm(BULLET_TEXT_START_CM).twips), hanging=str(Cm(MARKER_OFFSET_CM).twips))
             pPr3.append(ind3)
             lvl3.append(pPr3)
-            new_abstract_num.append(lvl3)
+            abstract_num.append(lvl3)
 
+            numbering_elm.append(abstract_num)
 
-            numbering_elm.append(new_abstract_num)
-
-        # Create the actual numbering instance if it doesn't exist
-        # This links to the abstract definition.
-        num_instance_id = 1 # A simple, stable ID for the numbering instance
         if not numbering_elm.xpath(f'w:num[@w:numId="{num_instance_id}"]', namespaces=numbering_elm.nsmap):
-            new_num = OxmlElement('w:num', nsmap=numbering_elm.nsmap)
+            new_num = OxmlElement('w:num')
             new_num.set(qn('w:numId'), str(num_instance_id))
-            abstract_num_id_ref = OxmlElement('w:abstractNumId', nsmap=numbering_elm.nsmap)
+            abstract_num_id_ref = OxmlElement('w:abstractNumId')
             abstract_num_id_ref.set(qn('w:val'), str(abstract_num_id))
             new_num.append(abstract_num_id_ref)
             numbering_elm.append(new_num)
-        
-        # --- End Numbering Setup ---
 
         logical_elements = preprocess_precedent(precedent_content, app_inputs)
-        
+        numbered_list_active = False
+
         for element in logical_elements:
-            logger.debug(f"Rendering element: Type={element['type']}, Tag={element['block_tag']}, Content={element['content_lines']}")
+            logger.debug("Rendering element: Type=%s, Tag=%s, Content=%s", element['type'], element['block_tag'], element['content_lines'])
 
             render_this_element = True
             if element['block_tag']:
                 if element['block_tag'] in ['indiv', 'corp']:
-                    if (element['block_tag'] == 'indiv' and app_inputs['client_type'] != 'Individual') or \
-                       (element['block_tag'] == 'corp' and app_inputs['client_type'] != 'Corporate'):
-                        render_this_element = False
+                    render_this_element = (element['block_tag'] == 'indiv' and app_inputs['client_type'] == 'Individual') or \
+                                         (element['block_tag'] == 'corp' and app_inputs['client_type'] == 'Corporate')
                 elif element['block_tag'] in ['a1', 'a2', 'a3', 'a4', 'u1', 'u2', 'u3', 'u4']:
-                    if not should_render_track_block(element['block_tag'], app_inputs['claim_assigned'], app_inputs['selected_track']):
-                        render_this_element = False
-            
+                    render_this_element = should_render_track_block(element['block_tag'], app_inputs['claim_assigned'], app_inputs['selected_track'])
+
             if not render_this_element:
-                logger.debug(f"Skipping element: Type={element['type']}, Tag={element['block_tag']} due to conditional logic.")
+                logger.debug("Skipping element: Type=%s, Tag=%s due to conditional logic.", element['type'], element['block_tag'])
                 continue
 
-            # --- Add content to document based on element type ---
             if element['type'] == 'blank_line':
                 p = doc.add_paragraph()
                 p.paragraph_format.space_after = Pt(12)
-            
+                numbered_list_active = False
+
             elif element['type'] == 'fee_table':
                 for fee_line in element['content_lines']:
-                    p = doc.add_paragraph()
+                    p = doc.add_paragraph(style='NumberedListCustom')
+                    p.paragraph_format.numId = num_instance_id
+                    p.paragraph_format.ilvl = 0
                     pf = p.paragraph_format
-                    pf.alignment = WD_PARAGRAPH_ALIGNMENT.LEFT
+                    pf.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
                     add_formatted_runs(p, fee_line, placeholder_map)
                     pf.space_after = Pt(6)
-                if doc.paragraphs:
-                    doc.paragraphs[-1].paragraph_format.space_after = Pt(12)
-            
+                numbered_list_active = True
+
             elif element['type'] == 'heading':
-                p = doc.add_paragraph()
-                p.style = 'Heading 2'
+                p = doc.add_paragraph(style='Heading 2')
                 add_formatted_runs(p, element['content_lines'][0], placeholder_map)
                 p.paragraph_format.space_before = Pt(12)
                 p.paragraph_format.space_after = Pt(6)
+                numbered_list_active = False
 
             elif element['type'] == 'numbered_list_item':
-                p = doc.add_paragraph(style='NumberedListCustom') # Apply custom style
-                p.paragraph_format.set_attribute(qn('w:numId'), str(num_instance_id)) # Link to numbering instance
-                p.paragraph_format.set_attribute(qn('w:ilvl'), '0') # Set level 0 for this type
-
+                p = doc.add_paragraph(style='NumberedListCustom')
+                p._element.pPr.numPr.numId.val = num_instance_id
+                p._element.pPr.numPr.ilvl.val = 0
                 pf = p.paragraph_format
                 pf.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
-                
                 text_content = element['content_lines'][0]
                 is_indented = '[ind]' in text_content
                 cleaned_text = text_content.replace('[ind]', '').strip()
-
                 if is_indented:
-                    # Apply additional indent for [ind] on top of list style's indent
                     pf.left_indent = Cm(MAIN_LIST_TEXT_START_CM + INDENT_FOR_IND_TAG_CM)
-                    pf.first_line_indent = Cm(-MAIN_LIST_FIRST_LINE_OFFSET_CM) # Keep hanging
+                    pf.first_line_indent = Cm(-MARKER_OFFSET_CM)
                     pf.tab_stops.add_tab_stop(Cm(MAIN_LIST_TEXT_START_CM + INDENT_FOR_IND_TAG_CM))
-
                 add_formatted_runs(p, cleaned_text, placeholder_map)
+                pf.space_after = Pt(6)
+                numbered_list_active = True
 
             elif element['type'] == 'letter_list_item':
                 p = doc.add_paragraph(style='LetterListCustom')
-                p.paragraph_format.set_attribute(qn('w:numId'), str(num_instance_id))
-                p.paragraph_format.set_attribute(qn('w:ilvl'), '1') # Level 1 for letters
-
+                p._element.pPr.numPr.numId.val = num_instance_id
+                p._element.pPr.numPr.ilvl.val = 1
                 pf = p.paragraph_format
                 pf.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
-
                 text_content = element['content_lines'][0]
                 is_indented = '[ind]' in text_content
-                cleaned_content_stripped_tag = re.sub(r'^\[([a-zA-Z])\]\s*', '', text_content).strip()
-
+                cleaned_content = re.sub(r'^\[([a-zA-Z])\]\s*', '', text_content).strip()
                 if is_indented:
                     pf.left_indent = Cm(SUB_LIST_TEXT_START_CM + INDENT_FOR_IND_TAG_CM)
-                    pf.first_line_indent = Cm(-SUB_LIST_FIRST_LINE_OFFSET_CM)
+                    pf.first_line_indent = Cm(-MARKER_OFFSET_CM)
                     pf.tab_stops.add_tab_stop(Cm(SUB_LIST_TEXT_START_CM + INDENT_FOR_IND_TAG_CM))
-                
-                add_formatted_runs(p, cleaned_content_stripped_tag, placeholder_map)
+                add_formatted_runs(p, cleaned_content, placeholder_map)
+                pf.space_after = Pt(6)
+                numbered_list_active = False
 
             elif element['type'] == 'roman_list_item':
                 p = doc.add_paragraph(style='RomanListCustom')
-                p.paragraph_format.set_attribute(qn('w:numId'), str(num_instance_id))
-                p.paragraph_format.set_attribute(qn('w:ilvl'), '2') # Level 2 for roman
-
+                p._element.pPr.numPr.numId.val = num_instance_id
+                p._element.pPr.numPr.ilvl.val = 2
                 pf = p.paragraph_format
                 pf.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
-
                 text_content = element['content_lines'][0]
                 is_indented = '[ind]' in text_content
-                cleaned_content_stripped_tag = re.sub(r'^\[(i{1,3}|iv|v|vi|vii)\]\s*', '', text_content).strip()
-
+                cleaned_content = re.sub(r'^\[(i{1,3}|iv|v|vi|vii)\]\s*', '', text_content).strip()
                 if is_indented:
-                    # Adjust if deeper indent is intended for roman + [ind]
-                    pf.left_indent = Cm(SUB_LIST_TEXT_START_CM + INDENT_FOR_IND_TAG_CM + 0.8) # Arbitrary extra indent for deeper level
-                    pf.first_line_indent = Cm(-SUB_LIST_FIRST_LINE_OFFSET_CM)
-                    pf.tab_stops.add_tab_stop(Cm(SUB_LIST_TEXT_START_CM + INDENT_FOR_IND_TAG_CM + 0.8))
+                    pf.left_indent = Cm(SUB_ROMAN_TEXT_START_CM + INDENT_FOR_IND_TAG_CM)
+                    pf.first_line_indent = Cm(-MARKER_OFFSET_CM)
+                    pf.tab_stops.add_tab_stop(Cm(SUB_ROMAN_TEXT_START_CM + INDENT_FOR_IND_TAG_CM))
+                add_formatted_runs(p, cleaned_content, placeholder_map)
+                pf.space_after = Pt(6)
+                numbered_list_active = False
 
-                add_formatted_runs(p, cleaned_content_stripped_tag, placeholder_map)
-            
             elif element['type'] == 'bullet_list_item':
                 p = doc.add_paragraph(style='BulletListCustom')
-                p.paragraph_format.set_attribute(qn('w:numId'), str(num_instance_id))
-                p.paragraph_format.set_attribute(qn('w:ilvl'), '3') # Level 3 for bullet
-
+                p._element.pPr.numPr.numId.val = num_instance_id
+                p._element.pPr.numPr.ilvl.val = 3
                 pf = p.paragraph_format
                 pf.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
-
                 text_content = element['content_lines'][0]
                 is_indented = '[ind]' in text_content
                 cleaned_content = text_content.replace('[ind]', '').strip()
-
                 if is_indented:
-                    pf.left_indent = Cm(MAIN_LIST_TEXT_START_CM + INDENT_FOR_IND_TAG_CM)
-                    pf.first_line_indent = Cm(-MAIN_LIST_FIRST_LINE_OFFSET_CM)
-                    pf.tab_stops.add_tab_stop(Cm(MAIN_LIST_TEXT_START_CM + INDENT_FOR_IND_TAG_CM))
-
+                    pf.left_indent = Cm(BULLET_TEXT_START_CM + INDENT_FOR_IND_TAG_CM)
+                    pf.first_line_indent = Cm(-MARKER_OFFSET_CM)
+                    pf.tab_stops.add_tab_stop(Cm(BULLET_TEXT_START_CM + INDENT_FOR_IND_TAG_CM))
                 add_formatted_runs(p, cleaned_content, placeholder_map)
+                pf.space_after = Pt(6)
+                numbered_list_active = False
 
             elif element['type'] == 'general_paragraph':
                 p = doc.add_paragraph()
                 pf = p.paragraph_format
                 pf.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
-                
                 has_ind_tag = any('[ind]' in line for line in element['content_lines'])
-                combined_text_content = " ".join([line.replace('[ind]', '').strip() for line in element['content_lines']])
-                
+                combined_text = " ".join([line.replace('[ind]', '').strip() for line in element['content_lines']])
                 if has_ind_tag:
                     pf.left_indent = Cm(INDENT_FOR_IND_TAG_CM)
-
-                add_formatted_runs(p, combined_text_content, placeholder_map)
+                add_formatted_runs(p, combined_text, placeholder_map)
                 pf.space_after = Pt(12)
+                numbered_list_active = False
 
         if doc.paragraphs and doc.paragraphs[-1].paragraph_format.space_after == Pt(0):
             doc.paragraphs[-1].paragraph_format.space_after = Pt(6)
 
-        logger.info("Client Care Letter document content processed into Word document.")
+        logger.info("Client Care Letter document content processed.")
         return doc
     except Exception as e:
-        logger.error(f"Error processing precedent text into Word document: {str(e)}")
+        logger.error("Error processing precedent text: %s", str(e))
         raise
 
 # --- Streamlit App UI ---
@@ -821,7 +721,7 @@ if submitted:
     for key in required_inputs:
         if not app_inputs.get(key):
             st.error(f"Missing or empty input for '{key}'. Please fill in all required fields.")
-            logger.error(f"Validation failed: Missing or empty input for '{key}'.")
+            logger.error("Validation failed: Missing or empty input for '%s'.", key)
             st.stop()
 
     placeholder_map = get_placeholder_map(app_inputs, firm_details)
