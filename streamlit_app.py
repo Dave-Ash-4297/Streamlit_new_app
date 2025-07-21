@@ -114,13 +114,18 @@ def add_formatted_runs(paragraph, text_line):
 def should_render_track_block(tag, claim_assigned, selected_track):
     """Determines if a court track block should be rendered based on the tag and inputs."""
     tag_map = {
-        'a1': (True, "Small Claims Track"), 'a2': (True, "Fast Track"),
-        'a3': (True, "Intermediate Track"), 'a4': (True, "Multi Track"),
-        'u1': (False, "Small Claims Track"), 'u2': (False, "Fast Track"),
-        'u3': (False, "Intermediate Track"), 'u4': (False, "Multi Track"),
+        'a1': (True, "Small Claims Track"), 
+        'a2': (True, "Fast Track"),
+        'a3': (True, "Intermediate Track"), 
+        'a4': (True, "Multi Track"),
+        'u1': (False, "Small Claims Track"), 
+        'u2': (False, "Fast Track"),
+        'u3': (False, "Intermediate Track"), 
+        'u4': (False, "Multi Track"),
     }
     expected = tag_map.get(tag)
     if not expected:
+        logger.debug("Unknown track tag: %s", tag)
         return False
     expected_assignment, expected_track = expected
     result = claim_assigned == expected_assignment and selected_track == expected_track
@@ -179,6 +184,159 @@ def generate_fee_table(hourly_rate, client_type):
     if client_type == "Corporate":
         table_content += "\nNote: Corporate clients may be subject to additional administrative fees."
     return table_content
+
+def process_precedent_text(precedent_content, app_inputs, placeholder_map):
+    """Process the precedent text and return a Document object."""
+    doc = Document()
+    doc.styles['Normal'].font.name = 'HelveticaNeueLT Pro 45 Lt'
+    doc.styles['Normal'].font.size = Pt(11)
+
+    # Track conditional rendering state
+    rendering_state = {
+        'in_indiv_block': False,
+        'in_corp_block': False,
+        'active_track_blocks': []  # Stack to handle nested blocks
+    }
+    
+    lines = precedent_content.splitlines()
+    i = 0
+    
+    while i < len(lines):
+        line = lines[i].strip()
+        logger.debug("Processing line %d: %s", i, line)
+
+        # Handle opening/closing tags
+        if line.startswith("[indiv]"):
+            rendering_state['in_indiv_block'] = True
+            logger.debug("Entered individual block")
+            i += 1
+            continue
+        elif line.startswith("[/indiv]"):
+            rendering_state['in_indiv_block'] = False
+            logger.debug("Exited individual block")
+            i += 1
+            continue
+        elif line.startswith("[corp]"):
+            rendering_state['in_corp_block'] = True
+            logger.debug("Entered corporate block")
+            i += 1
+            continue
+        elif line.startswith("[/corp]"):
+            rendering_state['in_corp_block'] = False
+            logger.debug("Exited corporate block")
+            i += 1
+            continue
+        
+        # Handle track blocks
+        track_tag_match = re.match(r'\[/?(a[1-4]|u[1-4])\]', line)
+        if track_tag_match:
+            tag = track_tag_match.group(1)
+            if line.startswith('[/'):
+                # Closing tag
+                if tag in rendering_state['active_track_blocks']:
+                    rendering_state['active_track_blocks'].remove(tag)
+                    logger.debug("Exited track block: %s", tag)
+            else:
+                # Opening tag
+                rendering_state['active_track_blocks'].append(tag)
+                logger.debug("Entered track block: %s", tag)
+            i += 1
+            continue
+
+        # Check if we should render this content
+        should_render = True
+        
+        # Check client type conditions
+        if rendering_state['in_indiv_block'] and app_inputs['client_type'] != "Individual":
+            should_render = False
+            logger.debug("Skipping line - in individual block but client is corporate")
+        elif rendering_state['in_corp_block'] and app_inputs['client_type'] != "Corporate":
+            should_render = False
+            logger.debug("Skipping line - in corporate block but client is individual")
+        
+        # Check track conditions
+        elif rendering_state['active_track_blocks']:
+            track_should_render = False
+            for track_tag in rendering_state['active_track_blocks']:
+                if should_render_track_block(track_tag, app_inputs['claim_assigned'], app_inputs['selected_track']):
+                    track_should_render = True
+                    break
+            should_render = track_should_render
+            if not should_render:
+                logger.debug("Skipping line - track conditions not met for tags: %s", rendering_state['active_track_blocks'])
+
+        if not should_render:
+            i += 1
+            continue
+            
+        # Process empty lines
+        if not line or line == "[]":
+            if doc.paragraphs:
+                doc.paragraphs[-1].paragraph_format.space_after = Pt(12)
+            i += 1
+            continue
+
+        # Replace placeholders
+        for placeholder, value in placeholder_map.items():
+            line = line.replace(placeholder, str(value))
+
+        # Create paragraph and apply formatting
+        p = doc.add_paragraph()
+        pf = p.paragraph_format
+        pf.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
+        pf.space_after = Pt(0)
+        
+        text_content = line
+        is_indented = "[ind]" in text_content
+        if is_indented:
+            text_content = text_content.replace("[ind]", "").lstrip()
+
+        # Handle end-of-paragraph marker
+        has_end_paragraph = "[/p]" in text_content
+        if has_end_paragraph:
+            text_content = text_content.replace("[/p]", "").rstrip()
+            pf.space_after = Pt(12)
+
+        # Handle list formatting
+        list_match_letter = re.match(r'^\[([a-zA-Z])\]\s(.*)', text_content)
+        list_match_roman = re.match(r'^\[(i{1,3}|iv|v|vi|vii)\]\s(.*)', text_content)
+
+        if text_content.startswith("[#]"):
+            p.style = 'List Number'
+            text_content = text_content.replace("[#]", "", 1).lstrip()
+            add_formatted_runs(p, text_content)
+        elif list_match_letter:
+            letter, rest = list_match_letter.groups()
+            text_content = f"({letter.lower()})\t{rest.lstrip()}"
+            pf.left_indent = Cm(SUB_LETTER_TEXT_INDENT_NO_IND_CM)
+            pf.first_line_indent = Cm(-SUB_LETTER_HANGING_OFFSET_CM)
+            pf.tab_stops.add_tab_stop(Cm(SUB_LETTER_TEXT_INDENT_NO_IND_CM))
+            add_formatted_runs(p, text_content)
+        elif list_match_roman:
+            roman, rest = list_match_roman.groups()
+            text_content = f"({roman.lower()})\t{rest.lstrip()}"
+            pf.left_indent = Cm(SUB_ROMAN_TEXT_INDENT_CM)
+            pf.first_line_indent = Cm(-SUB_LETTER_HANGING_OFFSET_CM)
+            pf.tab_stops.add_tab_stop(Cm(SUB_ROMAN_TEXT_INDENT_CM))
+            add_formatted_runs(p, text_content)
+        elif text_content.startswith("[bp]"):
+            text_content = text_content.replace("[bp]", "", 1).lstrip()
+            p.style = 'List Bullet'
+            pf.space_after = Pt(6)
+            base_indent = INDENT_FOR_IND_TAG_CM
+            if is_indented:
+                base_indent = NESTED_BULLET_INDENT_CM
+            pf.left_indent = Cm(base_indent)
+            add_formatted_runs(p, text_content)
+        elif is_indented:
+            pf.left_indent = Cm(INDENT_FOR_IND_TAG_CM)
+            add_formatted_runs(p, text_content)
+        else:
+            add_formatted_runs(p, text_content)
+
+        i += 1
+    
+    return doc
 
 # --- Streamlit App UI ---
 
@@ -343,111 +501,9 @@ if submitted:
     placeholder_map = get_placeholder_map(app_inputs, firm_details)
 
     # --- Generate Client Care Letter ---
-    doc = Document()
-    doc.styles['Normal'].font.name = 'HelveticaNeueLT Pro 45 Lt'
-    doc.styles['Normal'].font.size = Pt(11)
-
-    in_indiv_block = in_corp_block = False
-    active_track_block = None
-    
     try:
-        for line in precedent_content.splitlines():
-            line = line.strip()
-            logger.debug("Processing line: %s", line)
-
-            # --- Block-level Tags ---
-            if line.startswith("[indiv]"): 
-                in_indiv_block = True
-                continue
-            if line.startswith("[/indiv]"): 
-                in_indiv_block = False
-                continue
-            if line.startswith("[corp]"): 
-                in_corp_block = True
-                continue
-            if line.startswith("[/corp]"): 
-                in_corp_block = False
-                continue
-            
-            track_tag_match = re.match(r'\[/?(a[1-4]|u[1-4])\]', line)
-            if track_tag_match:
-                tag = track_tag_match.group(1)
-                if line.startswith('[/'):
-                    if active_track_block == tag:
-                        active_track_block = None
-                else:
-                    active_track_block = tag
-                continue
-
-            # --- Conditional Rendering ---
-            if (in_indiv_block and app_inputs['client_type'] != "Individual") or \
-               (in_corp_block and app_inputs['client_type'] != "Corporate") or \
-               (active_track_block and not should_render_track_block(active_track_block, app_inputs['claim_assigned'], app_inputs['selected_track'])):
-                logger.debug("Skipping line due to conditional rendering: %s", line)
-                continue
-            
-            if not line or line == "[]":
-                if doc.paragraphs:
-                    doc.paragraphs[-1].paragraph_format.space_after = Pt(12)
-                continue
-
-            # --- Placeholder Replacement ---
-            for placeholder, value in placeholder_map.items():
-                line = line.replace(placeholder, str(value))
-
-            # --- Paragraph Styling and Content ---
-            p = doc.add_paragraph()
-            pf = p.paragraph_format
-            pf.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
-            pf.space_after = Pt(0)
-            
-            text_content = line
-            is_indented = "[ind]" in text_content
-            if is_indented:
-                text_content = text_content.replace("[ind]", "").lstrip()
-
-            # Handle end-of-paragraph marker
-            has_end_paragraph = "[/p]" in text_content
-            if has_end_paragraph:
-                text_content = text_content.replace("[/p]", "").rstrip()
-                pf.space_after = Pt(12)
-
-            # More specific regex to avoid conflicts with formatting tags like [bd], [b]
-            list_match_letter = re.match(r'^\[([a-zA-Z])\]\s(.*)', text_content)
-            list_match_roman = re.match(r'^\[(i{1,3}|iv|v|vi|vii)\]\s(.*)', text_content)
-
-            if text_content.startswith("[#]"):
-                p.style = 'List Number'
-                text_content = text_content.replace("[#]", "", 1).lstrip()
-                add_formatted_runs(p, text_content)
-            elif list_match_letter:
-                letter, rest = list_match_letter.groups()
-                text_content = f"({letter.lower()})\t{rest.lstrip()}"
-                pf.left_indent = Cm(SUB_LETTER_TEXT_INDENT_NO_IND_CM)
-                pf.first_line_indent = Cm(-SUB_LETTER_HANGING_OFFSET_CM)
-                pf.tab_stops.add_tab_stop(Cm(SUB_LETTER_TEXT_INDENT_NO_IND_CM))
-                add_formatted_runs(p, text_content)
-            elif list_match_roman:
-                roman, rest = list_match_roman.groups()
-                text_content = f"({roman.lower()})\t{rest.lstrip()}"
-                pf.left_indent = Cm(SUB_ROMAN_TEXT_INDENT_CM)
-                pf.first_line_indent = Cm(-SUB_LETTER_HANGING_OFFSET_CM)
-                pf.tab_stops.add_tab_stop(Cm(SUB_ROMAN_TEXT_INDENT_CM))
-                add_formatted_runs(p, text_content)
-            elif text_content.startswith("[bp]"):
-                text_content = text_content.replace("[bp]", "", 1).lstrip()
-                p.style = 'List Bullet'
-                pf.space_after = Pt(6)
-                base_indent = INDENT_FOR_IND_TAG_CM
-                if is_indented:
-                    base_indent = NESTED_BULLET_INDENT_CM
-                pf.left_indent = Cm(base_indent)
-                add_formatted_runs(p, text_content)
-            elif is_indented:
-                pf.left_indent = Cm(INDENT_FOR_IND_TAG_CM)
-                add_formatted_runs(p, text_content)
-            else:
-                add_formatted_runs(p, text_content)
+        doc = process_precedent_text(precedent_content, app_inputs, placeholder_map)
+        logger.info("Client Care Letter document processed successfully.")
     except Exception as e:
         st.error(f"Error processing precedent text: {str(e)}")
         logger.error("Error processing precedent text: %s", str(e))
