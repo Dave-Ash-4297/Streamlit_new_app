@@ -15,9 +15,11 @@ logger = logging.getLogger(__name__)
 
 # --- Constants ---
 INDENT_FOR_IND_TAG_CM = 1.25
-SUB_LETTER_HANGING_OFFSET_CM = 0.50
+SUB_LETTER_HANGING_OFFSET_CM = 0.7
 SUB_LETTER_TEXT_INDENT_NO_IND_CM = 0.7
+SUB_LETTER_TEXT_START_CM = 1.4
 SUB_ROMAN_TEXT_INDENT_CM = 1.4
+SUB_ROMAN_TEXT_START_CM = 2.1
 NESTED_BULLET_INDENT_CM = INDENT_FOR_IND_TAG_CM + 0.5
 
 # --- Utility Functions ---
@@ -25,7 +27,6 @@ def sanitize_input(text):
     """Sanitizes input to prevent injection or formatting issues."""
     if not isinstance(text, str):
         text = str(text)
-    # Escape HTML characters and remove potentially dangerous characters
     return html.escape(text).replace('\n', ' ').replace('\r', '')
 
 # --- Cached Data Loading ---
@@ -87,7 +88,7 @@ def get_placeholder_map(app_inputs, firm_details):
         'client_address_line2_conditional': str(app_inputs.get('client_address_line2_conditional', '')),
         'client_postcode': str(app_inputs.get('client_postcode', '')),
         'name': str(app_inputs.get('name', '')),
-        'matter_number': str(app_inputs.get('our_ref', '')),  # Added for initial advice document
+        'matter_number': str(app_inputs.get('our_ref', '')),
     }
     firm_placeholders = {k: str(v) for k, v in firm_details.items()}
     placeholders.update(firm_placeholders)
@@ -96,7 +97,6 @@ def get_placeholder_map(app_inputs, firm_details):
 
 def add_formatted_runs(paragraph, text_line, placeholder_map):
     """Adds text runs to a paragraph, processing inline formatting tags and placeholders."""
-    # Replace placeholders first
     for placeholder, value in placeholder_map.items():
         text_line = text_line.replace(placeholder, value)
     
@@ -208,8 +208,14 @@ def preprocess_precedent(precedent_content, app_inputs):
         line = lines[i].strip()
         logger.debug("Preprocessing line %d: %s", i, line)
 
-        # Handle block-level tags
         if line in ['[indiv]', '[corp]']:
+            if current_block and block_lines:
+                logical_elements.append({
+                    'type': 'paragraph_block',
+                    'content_lines': block_lines,
+                    'version': block_version,
+                    'paragraph_display_number_text': block_number
+                })
             current_block = line[1:-1]
             block_lines = []
             block_version = None
@@ -217,7 +223,9 @@ def preprocess_precedent(precedent_content, app_inputs):
             i += 1
             continue
         elif line in ['[/indiv]', '[/corp]']:
-            if current_block and block_lines:
+            if current_block and block
+
+_lines:
                 logical_elements.append({
                     'type': 'paragraph_block',
                     'content_lines': block_lines,
@@ -239,7 +247,6 @@ def preprocess_precedent(precedent_content, app_inputs):
             i += 1
             continue
 
-        # Handle numbered paragraphs
         if line.startswith('[#]'):
             if current_block and block_lines:
                 logical_elements.append({
@@ -297,9 +304,8 @@ def process_precedent_text(precedent_content, app_inputs, placeholder_map):
             add_formatted_runs(p, element['content'], placeholder_map)
             continue
 
-        # Process paragraph block
         block_lines = element['content_lines']
-        block versioning = element['version']
+        block_versioning = element['version']
         is_numbered_block = element['paragraph_display_number_text'] == '[#]'
 
         if block_versioning in ['indiv', 'corp']:
@@ -342,6 +348,9 @@ def process_precedent_text(precedent_content, app_inputs, placeholder_map):
 
             if is_numbered_block and first_content_line:
                 p.style = 'List Number'
+                pf.left_indent = Cm(0.7)
+                pf.first_line_indent = Cm(-0.7)
+                pf.tab_stops.add_tab_stop(Cm(0.7))
                 text_content = text_content.replace('[#]', '', 1).lstrip()
                 first_content_line = False
             elif text_content.startswith('[u]'):
@@ -361,17 +370,19 @@ def process_precedent_text(precedent_content, app_inputs, placeholder_map):
                 if list_match_letter:
                     letter, rest = list_match_letter.groups()
                     text_content = f"({letter.lower()})\t{rest.lstrip()}"
-                    indent = INDENT_FOR_IND_TAG_CM + SUB_LETTER_HANGING_OFFSET_CM if is_indented else SUB_LETTER_TEXT_INDENT_NO_IND_CM
-                    pf.left_indent = Cm(indent)
-                    pf.first_line_indent = Cm(-SUB_LETTER_HANGING_OFFSET_CM)
-                    pf.tab_stops.add_tab_stop(Cm(indent))
+                    indent = SUB_LETTER_TEXT_INDENT_NO_IND_CM + INDENT_FOR_IND_TAG_CM if is_indented else SUB_LETTER_TEXT_INDENT_NO_IND_CM
+                    text_indent = SUB_LETTER_TEXT_START_CM + INDENT_FOR_IND_TAG_CM if is_indented else SUB_LETTER_TEXT_START_CM
+                    pf.left_indent = Cm(text_indent)
+                    pf.first_line_indent = Cm(indent - text_indent)
+                    pf.tab_stops.add_tab_stop(Cm(text_indent))
                 elif list_match_roman:
                     roman, rest = list_match_roman.groups()
                     text_content = f"({roman.lower()})\t{rest.lstrip()}"
-                    indent = INDENT_FOR_IND_TAG_CM + SUB_ROMAN_TEXT_INDENT_CM if is_indented else SUB_ROMAN_TEXT_INDENT_CM
-                    pf.left_indent = Cm(indent)
-                    pf.first_line_indent = Cm(-SUB_LETTER_HANGING_OFFSET_CM)
-                    pf.tab_stops.add_tab_stop(Cm(indent))
+                    indent = SUB_ROMAN_TEXT_INDENT_CM + INDENT_FOR_IND_TAG_CM if is_indented else SUB_ROMAN_TEXT_INDENT_CM
+                    text_indent = SUB_ROMAN_TEXT_START_CM + INDENT_FOR_IND_TAG_CM if is_indented else SUB_ROMAN_TEXT_START_CM
+                    pf.left_indent = Cm(text_indent)
+                    pf.first_line_indent = Cm(indent - text_indent)
+                    pf.tab_stops.add_tab_stop(Cm(text_indent))
                 elif is_indented:
                     pf.left_indent = Cm(INDENT_FOR_IND_TAG_CM)
 
