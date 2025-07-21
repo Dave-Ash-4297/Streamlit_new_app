@@ -1,8 +1,4 @@
-Our Ref: {our_ref}
-Your Ref: {your_ref}
-{letter_date}
-[]
-Dear {client_name_input}
+
 []
 [bd]Introduction[/bd][/p]
 [#]Further to our recent discussions, we now write to confirm the terms under which [bd]{short_name}[/bd] will act for you in relation to matter number {our_ref}. As a firm that is regulated by the Solicitors Regulation Authority, we are required to send you this letter which contains specific and prescribed information.[/p]
