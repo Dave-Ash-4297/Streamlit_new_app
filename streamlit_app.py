@@ -3,6 +3,8 @@ from docx import Document
 from docx.shared import Pt, Cm
 from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
 from docx.enum.style import WD_STYLE_TYPE
+from docx.oxml.ns import qn
+from docx.oxml import OxmlElement
 import io
 from datetime import datetime
 import re
@@ -15,22 +17,18 @@ logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %
 logger = logging.getLogger(__name__)
 
 # --- Constants ---
-# Indentation values in CM for various list and paragraph types
 INDENT_FOR_IND_TAG_CM = 1.25 # Base indent for paragraphs marked with [ind]
 
-# For numbered lists like 1., 2., 3.
-NUMBERED_LIST_TEXT_START_CM = 1.0 # Where the text after the number should start
+# Indentation for list levels
+# For top-level numbered/bullet lists, text usually starts around 1.0 cm from left margin
+# For sub-levels, it increments.
 
-# For lettered lists like (a), (b)
-LETTER_LIST_MARKER_INDENT_CM = 1.0 # Where (a) should start (left edge of parenthesis)
-LETTER_LIST_TEXT_START_CM = 1.6 # Where the text after (a) should start
+# Adjust these based on desired final Word document appearance
+MAIN_LIST_LEFT_INDENT_CM = 1.0
+MAIN_LIST_FIRST_LINE_OFFSET_CM = 0.6 # How far the marker (1., •) is left of the text start
 
-# For roman lists like (i), (ii)
-ROMAN_LIST_MARKER_INDENT_CM = 1.6 # Where (i) should start
-ROMAN_LIST_TEXT_START_CM = 2.2 # Where the text after (i) should start
-
-# For bullet lists
-BULLET_LIST_TEXT_START_CM = 1.0 # Where the text after the bullet should start
+SUB_LIST_LEFT_INDENT_CM = 1.8 # Text start for (a), (i)
+SUB_LIST_FIRST_LINE_OFFSET_CM = 0.6 # How far the marker ((a), (i)) is left of the text start
 
 
 # --- Utility Functions ---
@@ -69,7 +67,6 @@ def load_firm_details():
 def load_precedent_text():
     """Loads and caches the precedent text from a file."""
     try:
-        # Crucial: Ensure precedent.txt ONLY contains the precedent text, nothing else.
         with open("precedent.txt", "r", encoding="utf-8") as f:
             content = f.read().strip()
             logger.info("Successfully loaded precedent.txt")
@@ -126,7 +123,6 @@ def add_formatted_runs(paragraph, text_line, placeholder_map):
             logger.warning("Unprocessed curly brace placeholders in text after replacement: %s", processed_text)
         
         # 2. Process inline formatting tags ([bd], [italics], [u])
-        # Only split on recognized inline formatting tags. Structural tags are handled upstream.
         parts = re.split(r'(\[bd\]|\[/bd\]|\[italics\]|\[/italics\]|\[u\]|\[/u\]|\[underline\]|\[/underline\])', processed_text)
         
         is_bold = False
@@ -272,7 +268,7 @@ def preprocess_precedent(precedent_content, app_inputs):
             for line_in_block in current_paragraph_lines:
                 # Strip [/p] if it exists, as spacing is handled by docx.paragraph_format.space_after
                 line_in_block = line_in_block.replace('[/p]', '').strip() 
-                # Keep [ind] as is if it's there, we'll process it in render
+                # Keep [ind] if it's there, as its presence affects paragraph indent
                 cleaned_lines_for_block.append(line_in_block)
 
             logical_elements.append({
@@ -325,44 +321,43 @@ def preprocess_precedent(precedent_content, app_inputs):
             })
             logger.debug(f"Detected heading: '{stripped_line}'")
         elif stripped_line.startswith('[#]'): # Numbered List Item
-            add_current_paragraph_block()
+            add_current_paragraph_block() # End any previous general paragraph
             logical_elements.append({
                 'type': 'numbered_list_item',
                 'content_lines': [stripped_line.replace('[#]', '', 1).lstrip()], # Remove tag, left strip remaining space
                 'block_tag': current_block_tag
             })
             logger.debug(f"Detected numbered list item: '{stripped_line}'")
-        elif stripped_line.startswith('[a]') or stripped_line.startswith('[b]') or stripped_line.startswith('[c]'): # Lettered List Item
-            add_current_paragraph_block()
+        elif re.match(r'^\[([a-zA-Z])\]', stripped_line): # Lettered List Item
+            add_current_paragraph_block() # End any previous general paragraph
             logical_elements.append({
                 'type': 'letter_list_item',
-                'content_lines': [stripped_line], # Keep tag for regex parsing in renderer
+                'content_lines': [stripped_line], # Keep original tag for formatting in renderer
                 'block_tag': current_block_tag
             })
             logger.debug(f"Detected lettered list item: '{stripped_line}'")
         elif re.match(r'^\[(i{1,3}|iv|v|vi|vii)\]', stripped_line): # Roman List Item
-            add_current_paragraph_block()
+            add_current_paragraph_block() # End any previous general paragraph
             logical_elements.append({
                 'type': 'roman_list_item',
-                'content_lines': [stripped_line], # Keep tag for regex parsing in renderer
+                'content_lines': [stripped_line], # Keep original tag for formatting in renderer
                 'block_tag': current_block_tag
             })
             logger.debug(f"Detected roman list item: '{stripped_line}'")
         elif stripped_line.startswith('[bp]'): # Bullet List Item
-            add_current_paragraph_block()
+            add_current_paragraph_block() # End any previous general paragraph
             logical_elements.append({
                 'type': 'bullet_list_item',
                 'content_lines': [stripped_line.replace('[bp]', '', 1).lstrip()], # Remove tag
                 'block_tag': current_block_tag
             })
             logger.debug(f"Detected bullet list item: '{stripped_line}'")
-        elif not stripped_line: # An empty line (not `[]`) - treats as a natural paragraph break
+        elif not stripped_line: # An empty line (not `[]`) - acts as a logical paragraph break
             add_current_paragraph_block()
             logger.debug("Detected empty line (natural paragraph break).")
         else:
-            # This is a regular content line, accumulate it
-            # Preserve leading space from [ind] if present for now, clean later.
-            current_paragraph_lines.append(line)
+            # This is a regular content line, accumulate it to current paragraph block
+            current_paragraph_lines.append(line) # Add original line content
             
         i += 1
 
@@ -382,50 +377,112 @@ def process_precedent_text(precedent_content, app_inputs, placeholder_map):
         doc.styles['Normal'].font.name = 'Arial'
         doc.styles['Normal'].font.size = Pt(11)
 
-        # --- Define Custom Styles ---
-        # It's better to ensure these are defined once.
+        # --- Define Custom List Styles ---
+        # These styles are designed to control numbering and indentation precisely.
         styles = doc.styles
 
-        # 1. Custom Numbered List Style (for [#] items)
+        # Helper to create/get numbering definitions (abstractNum and num)
+        # This is more robust for custom numbering than relying solely on built-in styles
+        def get_or_create_num_definition(doc, style_id, lvl_id, fmt, start_at, level_text, indent_cm, hanging_cm):
+            # Find or create abstract numbering definition
+            num_id = len(doc.part.document.numbering_part.element.abstractNum_lst.findall(qn('w:abstractNum'))) + 1
+            if style_id not in [s.style_id for s in doc.styles]: # Create only if style is new
+                # Create a new abstractNum
+                abstract_num = OxmlElement('w:abstractNum', nsmap=doc.styles.nsmap)
+                abstract_num.set(qn('w:abstractNumId'), str(num_id))
+                abstract_num.set(qn('w:nsid'), '{0:08X}'.format(num_id)) # Namespace ID
+
+                style_link = OxmlElement('w:styleLink', nsmap=doc.styles.nsmap)
+                style_link.set(qn('w:val'), style_id)
+                abstract_num.append(style_link)
+
+                # Define the level properties
+                lvl = OxmlElement('w:lvl', nsmap=doc.styles.nsmap)
+                lvl.set(qn('w:ilvl'), str(lvl_id))
+                lvl.set(qn('w:tplc'), '04090001') # Standard template for basic numbering
+                lvl.set(qn('w:tentative'), '1') # Tentative flag
+
+                num_fmt = OxmlElement('w:numFmt', nsmap=doc.styles.nsmap)
+                num_fmt.set(qn('w:val'), fmt)
+                lvl.append(num_fmt)
+
+                lvl_text = OxmlElement('w:lvlText', nsmap=doc.styles.nsmap)
+                lvl_text.set(qn('w:val'), level_text)
+                lvl.append(lvl_text)
+
+                lvl_jcs = OxmlElement('w:lvlJc', nsmap=doc.styles.nsmap)
+                lvl_jcs.set(qn('w:val'), 'left') # Justification for marker
+                lvl.append(lvl_jcs)
+
+                p_pr = OxmlElement('w:pPr', nsmap=doc.styles.nsmap)
+                ind = OxmlElement('w:ind', nsmap=doc.styles.nsmap)
+                ind.set(qn('w:left'), str(Cm(indent_cm).twips))
+                ind.set(qn('w:hanging'), str(Cm(hanging_cm).twips))
+                p_pr.append(ind)
+                lvl.append(p_pr)
+
+                r_pr = OxmlElement('w:rPr', nsmap=doc.styles.nsmap)
+                r_font = OxmlElement('w:rFonts', nsmap=doc.styles.nsmap)
+                r_font.set(qn('w:ascii'), 'Arial')
+                r_font.set(qn('w:hAnsi'), 'Arial')
+                r_pr.append(r_font)
+                sz = OxmlElement('w:sz', nsmap=doc.styles.nsmap)
+                sz.set(qn('w:val'), str(Pt(11).twips))
+                r_pr.append(sz)
+                lvl.append(r_pr)
+
+                abstract_num.append(lvl)
+                doc.part.document.numbering_part.element.abstractNum_lst.append(abstract_num)
+
+            # Create or get actual numbering instance
+            num_elem = OxmlElement('w:num', nsmap=doc.styles.nsmap)
+            num_elem.set(qn('w:numId'), str(num_id)) # Use abstract num ID
+            abstract_num_id_ref = OxmlElement('w:abstractNumId', nsmap=doc.styles.nsmap)
+            abstract_num_id_ref.set(qn('w:val'), str(num_id))
+            num_elem.append(abstract_num_id_ref)
+            doc.part.document.numbering_part.element.num_lst.append(num_elem)
+            return num_id
+
+        # Custom Numbered List (e.g., 1., 2.)
+        numbered_list_id = get_or_create_num_definition(
+            doc, 'NumberedListCustom', 0, 'decimal', 1, '%1.',
+            MAIN_LIST_LEFT_INDENT_CM, MAIN_LIST_FIRST_LINE_OFFSET_CM
+        )
         if 'NumberedListCustom' not in styles:
             num_style = styles.add_style('NumberedListCustom', WD_STYLE_TYPE.PARAGRAPH)
             num_style.base_style = styles['Normal']
-            num_format = num_style.paragraph_format
-            # Left indent is where text starts, first_line_indent is negative for hanging
-            num_format.left_indent = Cm(NUMBERED_LIST_TEXT_START_CM)
-            num_format.first_line_indent = Cm(-0.5) # This offset puts the number to the left
-            num_format.tab_stops.add_tab_stop(Cm(NUMBERED_LIST_TEXT_START_CM))
-            num_format.space_after = Pt(6)
+            num_style.paragraph_format.space_after = Pt(6) # Spacing for list items
 
-        # 2. Custom Lettered List Style (for [a] [b] items)
+
+        # Custom Lettered List (e.g., (a), (b))
+        letter_list_id = get_or_create_num_definition(
+            doc, 'LetterListCustom', 0, 'lowerLetter', 1, '(%1)',
+            SUB_LIST_LEFT_INDENT_CM, SUB_LIST_FIRST_LINE_OFFSET_CM
+        )
         if 'LetterListCustom' not in styles:
             letter_style = styles.add_style('LetterListCustom', WD_STYLE_TYPE.PARAGRAPH)
             letter_style.base_style = styles['Normal']
-            letter_format = letter_style.paragraph_format
-            letter_format.left_indent = Cm(LETTER_LIST_TEXT_START_CM)
-            letter_format.first_line_indent = Cm(LETTER_LIST_MARKER_INDENT_CM - LETTER_LIST_TEXT_START_CM)
-            letter_format.tab_stops.add_tab_stop(Cm(LETTER_LIST_TEXT_START_CM))
-            letter_format.space_after = Pt(6)
+            letter_style.paragraph_format.space_after = Pt(6)
 
-        # 3. Custom Roman List Style (for [i] [ii] items)
+        # Custom Roman List (e.g., (i), (ii))
+        roman_list_id = get_or_create_num_definition(
+            doc, 'RomanListCustom', 0, 'lowerRoman', 1, '(%1)',
+            SUB_LIST_LEFT_INDENT_CM, SUB_LIST_FIRST_LINE_OFFSET_CM # Adjust if deeper indent is needed
+        )
         if 'RomanListCustom' not in styles:
             roman_style = styles.add_style('RomanListCustom', WD_STYLE_TYPE.PARAGRAPH)
             roman_style.base_style = styles['Normal']
-            roman_format = roman_style.paragraph_format
-            roman_format.left_indent = Cm(ROMAN_LIST_TEXT_START_CM)
-            roman_format.first_line_indent = Cm(ROMAN_LIST_MARKER_INDENT_CM - ROMAN_LIST_TEXT_START_CM)
-            roman_format.tab_stops.add_tab_stop(Cm(ROMAN_LIST_TEXT_START_CM))
-            roman_format.space_after = Pt(6)
+            roman_style.paragraph_format.space_after = Pt(6)
 
-        # 4. Custom Bullet List Style (for [bp] items)
+        # Custom Bullet List (e.g., •)
+        bullet_list_id = get_or_create_num_definition(
+            doc, 'BulletListCustom', 0, 'bullet', 1, '•',
+            MAIN_LIST_LEFT_INDENT_CM, MAIN_LIST_FIRST_LINE_OFFSET_CM
+        )
         if 'BulletListCustom' not in styles:
             bullet_style = styles.add_style('BulletListCustom', WD_STYLE_TYPE.PARAGRAPH)
             bullet_style.base_style = styles['Normal']
-            bullet_format = bullet_style.paragraph_format
-            bullet_format.left_indent = Cm(BULLET_LIST_TEXT_START_CM)
-            bullet_format.first_line_indent = Cm(-0.5) # Hanging indent for bullet marker
-            bullet_format.tab_stops.add_tab_stop(Cm(BULLET_LIST_TEXT_START_CM))
-            bullet_format.space_after = Pt(6)
+            bullet_style.paragraph_format.space_after = Pt(6)
 
 
         # --- Process Logical Elements ---
@@ -452,7 +509,7 @@ def process_precedent_text(precedent_content, app_inputs, placeholder_map):
             # --- Add content to document based on element type ---
             if element['type'] == 'blank_line':
                 p = doc.add_paragraph()
-                p.paragraph_format.space_after = Pt(12) # Standard space after a blank line
+                p.paragraph_format.space_after = Pt(12)
             
             elif element['type'] == 'fee_table':
                 for fee_line in element['content_lines']:
@@ -460,37 +517,52 @@ def process_precedent_text(precedent_content, app_inputs, placeholder_map):
                     pf = p.paragraph_format
                     pf.alignment = WD_PARAGRAPH_ALIGNMENT.LEFT
                     add_formatted_runs(p, fee_line, placeholder_map)
-                    pf.space_after = Pt(6) # Small space between fee lines
+                    pf.space_after = Pt(6)
                 if doc.paragraphs:
-                    doc.paragraphs[-1].paragraph_format.space_after = Pt(12) # Larger space after the whole table
+                    doc.paragraphs[-1].paragraph_format.space_after = Pt(12)
             
             elif element['type'] == 'heading':
                 p = doc.add_paragraph()
                 p.style = 'Heading 2'
-                add_formatted_runs(p, element['content_lines'][0], placeholder_map) # Heading text is always first line
+                add_formatted_runs(p, element['content_lines'][0], placeholder_map)
                 p.paragraph_format.space_before = Pt(12)
                 p.paragraph_format.space_after = Pt(6)
 
             elif element['type'] == 'numbered_list_item':
                 p = doc.add_paragraph(style='NumberedListCustom')
+                p.style.paragraph_format.line_spacing = 1.0 # Ensure single spacing for lists
+                p.style.paragraph_format.line_spacing_rule = WD_PARAGRAPH_ALIGNMENT.SINGLE
+
+                # Set numbering for the paragraph
+                p.paragraph_format.set_attribute(qn('w:numId'), str(numbered_list_id))
+                p.paragraph_format.set_attribute(qn('w:ilvl'), '0') # Level 0
+
                 pf = p.paragraph_format
                 pf.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
                 
-                # Check for [ind] within the line itself
                 text_content = element['content_lines'][0]
-                is_indented = '[ind]' in text_content # Check for [ind] tag within the line
-                cleaned_text = text_content.replace('[ind]', '').strip() # Strip [ind] for content
+                is_indented = '[ind]' in text_content
+                cleaned_text = text_content.replace('[ind]', '').strip()
 
-                # Apply [ind] specific offset AFTER base list style is applied
                 if is_indented:
-                    pf.left_indent = Cm(NUMBERED_LIST_TEXT_START_CM + INDENT_FOR_IND_TAG_CM)
-                    pf.first_line_indent = Cm(-0.5) # Maintain hanging indent for the number
-                    pf.tab_stops.add_tab_stop(Cm(NUMBERED_LIST_TEXT_START_CM + INDENT_FOR_IND_TAG_CM))
+                    # Adjust the paragraph's overall left indent for the [ind] tag
+                    # The style already sets base list indent, add INDENT_FOR_IND_TAG_CM on top
+                    pf.left_indent = Cm(MAIN_LIST_LEFT_INDENT_CM + INDENT_FOR_IND_TAG_CM)
+                    # Recalculate first_line_indent relative to new left_indent to maintain hanging effect
+                    pf.first_line_indent = Cm(-MAIN_LIST_FIRST_LINE_OFFSET_CM) 
+                    pf.tab_stops.add_tab_stop(Cm(MAIN_LIST_LEFT_INDENT_CM + INDENT_FOR_IND_TAG_CM))
 
                 add_formatted_runs(p, cleaned_text, placeholder_map)
 
             elif element['type'] == 'letter_list_item':
                 p = doc.add_paragraph(style='LetterListCustom')
+                p.style.paragraph_format.line_spacing = 1.0
+                p.style.paragraph_format.line_spacing_rule = WD_PARAGRAPH_ALIGNMENT.SINGLE
+                
+                # Set numbering for the paragraph
+                p.paragraph_format.set_attribute(qn('w:numId'), str(letter_list_id))
+                p.paragraph_format.set_attribute(qn('w:ilvl'), '0') # Level 0
+
                 pf = p.paragraph_format
                 pf.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
 
@@ -500,20 +572,27 @@ def process_precedent_text(precedent_content, app_inputs, placeholder_map):
                 
                 match = re.match(r'^\[([a-zA-Z])\]\s*(.*)', cleaned_content)
                 if match:
-                    letter_marker = match.group(1).lower()
+                    # We rely on the numbering style to generate the (a) marker.
+                    # The text part follows directly.
                     rest_of_text = match.group(2).lstrip()
-                    text_to_add = f"({letter_marker})\t{rest_of_text}"
 
                     # Apply [ind] specific offset
                     if is_indented:
-                        pf.left_indent = Cm(LETTER_LIST_TEXT_START_CM + INDENT_FOR_IND_TAG_CM)
-                        pf.first_line_indent = Cm(LETTER_LIST_MARKER_INDENT_CM - (LETTER_LIST_TEXT_START_CM + INDENT_FOR_IND_TAG_CM))
-                        pf.tab_stops.add_tab_stop(Cm(LETTER_LIST_TEXT_START_CM + INDENT_FOR_IND_TAG_CM))
+                        pf.left_indent = Cm(SUB_LIST_LEFT_INDENT_CM + INDENT_FOR_IND_TAG_CM)
+                        pf.first_line_indent = Cm(-SUB_LIST_FIRST_LINE_OFFSET_CM)
+                        pf.tab_stops.add_tab_stop(Cm(SUB_LIST_LEFT_INDENT_CM + INDENT_FOR_IND_TAG_CM))
                     
-                    add_formatted_runs(p, text_to_add, placeholder_map)
+                    add_formatted_runs(p, rest_of_text, placeholder_map)
 
             elif element['type'] == 'roman_list_item':
                 p = doc.add_paragraph(style='RomanListCustom')
+                p.style.paragraph_format.line_spacing = 1.0
+                p.style.paragraph_format.line_spacing_rule = WD_PARAGRAPH_ALIGNMENT.SINGLE
+
+                # Set numbering for the paragraph
+                p.paragraph_format.set_attribute(qn('w:numId'), str(roman_list_id))
+                p.paragraph_format.set_attribute(qn('w:ilvl'), '0') # Level 0
+
                 pf = p.paragraph_format
                 pf.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
 
@@ -523,20 +602,24 @@ def process_precedent_text(precedent_content, app_inputs, placeholder_map):
 
                 match = re.match(r'^\[(i{1,3}|iv|v|vi|vii)\]\s*(.*)', cleaned_content)
                 if match:
-                    roman_marker = match.group(1).lower()
                     rest_of_text = match.group(2).lstrip()
-                    text_to_add = f"({roman_marker})\t{rest_of_text}"
 
-                    # Apply [ind] specific offset
                     if is_indented:
-                        pf.left_indent = Cm(ROMAN_LIST_TEXT_START_CM + INDENT_FOR_IND_TAG_CM)
-                        pf.first_line_indent = Cm(ROMAN_LIST_MARKER_INDENT_CM - (ROMAN_LIST_TEXT_START_CM + INDENT_FOR_IND_TAG_CM))
-                        pf.tab_stops.add_tab_stop(Cm(ROMAN_LIST_TEXT_START_CM + INDENT_FOR_IND_TAG_CM))
+                        pf.left_indent = Cm(SUB_LIST_LEFT_INDENT_CM + INDENT_FOR_IND_TAG_CM)
+                        pf.first_line_indent = Cm(-SUB_LIST_FIRST_LINE_OFFSET_CM)
+                        pf.tab_stops.add_tab_stop(Cm(SUB_LIST_LEFT_INDENT_CM + INDENT_FOR_IND_TAG_CM))
 
-                    add_formatted_runs(p, text_to_add, placeholder_map)
+                    add_formatted_runs(p, rest_of_text, placeholder_map)
             
             elif element['type'] == 'bullet_list_item':
                 p = doc.add_paragraph(style='BulletListCustom')
+                p.style.paragraph_format.line_spacing = 1.0
+                p.style.paragraph_format.line_spacing_rule = WD_PARAGRAPH_ALIGNMENT.SINGLE
+
+                # Set numbering for the paragraph
+                p.paragraph_format.set_attribute(qn('w:numId'), str(bullet_list_id))
+                p.paragraph_format.set_attribute(qn('w:ilvl'), '0') # Level 0
+
                 pf = p.paragraph_format
                 pf.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
 
@@ -545,9 +628,9 @@ def process_precedent_text(precedent_content, app_inputs, placeholder_map):
                 cleaned_content = text_content.replace('[ind]', '').strip()
 
                 if is_indented:
-                    pf.left_indent = Cm(BULLET_LIST_TEXT_START_CM + INDENT_FOR_IND_TAG_CM)
-                    pf.first_line_indent = Cm(-0.5) # Hanging indent for bullet marker
-                    pf.tab_stops.add_tab_stop(Cm(BULLET_LIST_TEXT_START_CM + INDENT_FOR_IND_TAG_CM))
+                    pf.left_indent = Cm(MAIN_LIST_LEFT_INDENT_CM + INDENT_FOR_IND_TAG_CM)
+                    pf.first_line_indent = Cm(-MAIN_LIST_FIRST_LINE_OFFSET_CM) # Hanging indent for bullet marker
+                    pf.tab_stops.add_tab_stop(Cm(MAIN_LIST_LEFT_INDENT_CM + INDENT_FOR_IND_TAG_CM))
 
                 add_formatted_runs(p, cleaned_content, placeholder_map)
 
@@ -566,7 +649,7 @@ def process_precedent_text(precedent_content, app_inputs, placeholder_map):
                     pf.left_indent = Cm(INDENT_FOR_IND_TAG_CM)
 
                 add_formatted_runs(p, combined_text_content, placeholder_map)
-                pf.space_after = Pt(12) # Standard space after a general paragraph
+                pf.space_after = Pt(12)
 
         # Final check for space after the very last paragraph
         if doc.paragraphs and doc.paragraphs[-1].paragraph_format.space_after == Pt(0):
@@ -637,7 +720,7 @@ precedent_content = load_precedent_text()
 # Ensure precedent content loaded successfully
 if not precedent_content:
     st.error("Precedent text could not be loaded. Please check 'precedent.txt' file.")
-    st.stop() # Stop the app if precedent.txt is not found or empty
+    st.stop()
 
 with st.form("input_form"):
     st.header("1. Letter & Client Details")
@@ -792,4 +875,3 @@ if submitted:
         )
     else:
         st.error("No documents could be generated. Please check inputs and logs for errors.")
-        
