@@ -106,16 +106,23 @@ def add_formatted_runs(paragraph, text_line, placeholder_map):
         # Log the placeholder_map for debugging
         logger.debug("Placeholder map in add_formatted_runs: %s", placeholder_map)
 
-        # Replace placeholders with their values
+        # Replace placeholders with their values (support both {placeholder} and [placeholder])
         processed_text = text_line
         for placeholder, value in placeholder_map.items():
+            # Handle {placeholder} syntax
             placeholder_pattern = f"{{{placeholder}}}"
             if placeholder_pattern in processed_text:
                 logger.debug("Replacing placeholder '%s' with value '%s'", placeholder_pattern, value)
                 processed_text = processed_text.replace(placeholder_pattern, str(value))
+            # Handle [placeholder] syntax
+            placeholder_pattern_alt = f"[{placeholder}]"
+            if placeholder_pattern_alt in processed_text:
+                logger.debug("Replacing placeholder '%s' with value '%s'", placeholder_pattern_alt, value)
+                processed_text = processed_text.replace(placeholder_pattern_alt, str(value))
         
-        # Check if any placeholders remain unprocessed
-        if '{' in processed_text and '}' in processed_text:
+        # Check for unprocessed placeholders
+        if (('{' in processed_text and '}' in processed_text) or 
+            ('[' in processed_text and ']' in processed_text)):
             logger.warning("Unprocessed placeholders in text: %s", processed_text)
         
         # Handle formatting tags
@@ -233,11 +240,11 @@ def generate_fee_table(hourly_rate, client_type):
         ("Associate", hourly_rate * 0.8),
         ("Trainee", hourly_rate * 0.5)
     ]
-    table_content = "Role | Hourly Rate (excl. VAT)\n-----|------------------------\n"
+    table_content = ""
     for role, rate in roles:
-        table_content += f"{role} | £{rate:,.2f}\n"
+        table_content += f"[#]{role}: £{rate:,.2f} per hour (excl. VAT)[/p]\n"
     if client_type == "Corporate":
-        table_content += "\nNote: Corporate clients may be subject to additional administrative fees."
+        table_content += "[#]Note: Corporate clients may be subject to additional administrative fees.[/p]"
     return table_content
 
 def preprocess_precedent(precedent_content, app_inputs):
@@ -331,6 +338,8 @@ def preprocess_precedent(precedent_content, app_inputs):
                 block_lines = []
                 block_number = None
             logical_elements.append({'type': 'raw_line', 'content': line})
+        elif line == '[FEE_TABLE_PLACEHOLDER]':
+            block_lines.append(f"[{app_inputs['fee_table']}]")
         else:
             block_lines.append(line)
 
@@ -431,8 +440,8 @@ def process_precedent_text(precedent_content, app_inputs, placeholder_map):
                     pf.left_indent = Cm(base_indent)
                     pf.space_after = Pt(6)
                 else:
-                    list_match_letter = re.match(r'^\[([a-zA-Z])\]\s(.*)', text_content)
-                    list_match_roman = re.match(r'^\[(i{1,3}|iv|v|vi|vii)\]\s(.*)', text_content)
+                    list_match_letter = re.match(r'^\[([a-zA-Z])\]\s*(.*)', text_content)
+                    list_match_roman = re.match(r'^\[(i{1,3}|iv|v|vi|vii)\]\s*(.*)', text_content)
                     if list_match_letter:
                         letter, rest = list_match_letter.groups()
                         text_content = f"({letter.lower()})\t{rest.lstrip()}"
@@ -581,7 +590,7 @@ if submitted:
         lower_cost_total = lower_cost_estimate + lower_cost_vat
         upper_cost_total = upper_cost_estimate + upper_cost_vat
         costs_text = (
-            f"£{lower_cost_estimate:,.2f} to £{upper_cost_estimate:,.2f} plus VAT "
+            f"{lower_cost_estimate:,.2f} to £{upper_cost_estimate:,.2f} plus VAT "
             f"(currently standing at 20% but subject to change by the government) "
             f"which at the current rate would be £{lower_cost_total:,.2f} to £{upper_cost_total:,.2f} with VAT included."
         )
@@ -603,7 +612,7 @@ if submitted:
         'qu2_initial_steps': sanitize_input(qu2_initial_steps),
         'qu3_timescales': sanitize_input(qu3_timescales),
         'qu4_initial_costs_estimate': sanitize_input(costs_text),
-        'fee_table': sanitize_input(fee_table),
+        'fee_table': fee_table,
         'client_type': client_type,
         'claim_assigned': claim_assigned_input == "Yes",
         'selected_track': selected_track,
