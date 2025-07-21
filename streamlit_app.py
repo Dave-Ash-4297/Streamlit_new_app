@@ -2,6 +2,7 @@ import streamlit as st
 from docx import Document
 from docx.shared import Pt, Cm
 from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
+from docx.enum.style import WD_STYLE_TYPE
 import io
 from datetime import datetime
 import re
@@ -98,36 +99,28 @@ def get_placeholder_map(app_inputs, firm_details):
 def add_formatted_runs(paragraph, text_line, placeholder_map):
     """Adds text runs to a paragraph, processing inline formatting tags and placeholders."""
     try:
-        # Ensure text_line is a string
         if not isinstance(text_line, str):
             text_line = str(text_line)
             logger.warning("Converted non-string text_line to string: %s", text_line)
 
-        # Log the placeholder_map for debugging
         logger.debug("Placeholder map in add_formatted_runs: %s", placeholder_map)
 
-        # Replace placeholders with their values (support both {placeholder} and [placeholder])
         processed_text = text_line
         for placeholder, value in placeholder_map.items():
-            # Handle {placeholder} syntax
+            # Only handle {placeholder} syntax
             placeholder_pattern = f"{{{placeholder}}}"
             if placeholder_pattern in processed_text:
                 logger.debug("Replacing placeholder '%s' with value '%s'", placeholder_pattern, value)
                 processed_text = processed_text.replace(placeholder_pattern, str(value))
-            # Handle [placeholder] syntax
-            placeholder_pattern_alt = f"[{placeholder}]"
-            if placeholder_pattern_alt in processed_text:
-                logger.debug("Replacing placeholder '%s' with value '%s'", placeholder_pattern_alt, value)
-                processed_text = processed_text.replace(placeholder_pattern_alt, str(value))
         
-        # Check for unprocessed placeholders
-        if (('{' in processed_text and '}' in processed_text) or 
-            ('[' in processed_text and ']' in processed_text)):
-            logger.warning("Unprocessed placeholders in text: %s", processed_text)
+        if '{' in processed_text and '}' in processed_text:
+            logger.warning("Unprocessed curly brace placeholders in text: %s", processed_text)
         
         # Handle formatting tags
-        parts = re.split(r'(\[bd\]|\[/bd\]|\[italics\]|\[/italics\]|\[u\]|\[/u\]|\[underline\]|\[/underline\])', processed_text)
+        # Updated regex to match new custom list tags for bullet, letter, roman
+        parts = re.split(r'(\[bd\]|\[/bd\]|\[italics\]|\[/italics\]|\[u\]|\[/u\]|\[underline\]|\[/underline\]|\[bp\]|\[/bp\]|\[l\]|\[/l\]|\[r\]|\[/r\])', processed_text)
         is_bold = is_italic = is_underline = False
+        
         for part in parts:
             if not part:
                 continue
@@ -143,12 +136,14 @@ def add_formatted_runs(paragraph, text_line, placeholder_map):
                 is_underline = True
             elif part in ["[/u]", "[/underline]"]:
                 is_underline = False
+            elif part in ["[bp]", "[/bp]", "[l]", "[/l]", "[r]", "[/r]"]: # These are handled by paragraph styling, not inline runs
+                continue 
             else:
                 run = paragraph.add_run(part)
                 run.bold = is_bold
                 run.italic = is_italic
                 run.underline = is_underline
-                run.font.name = 'Arial'
+                run.font.name = 'Arial' # Standard font for content
                 run.font.size = Pt(11)
         logger.debug("Processed formatted runs for text: %s", processed_text)
     except Exception as e:
@@ -179,24 +174,24 @@ def should_render_track_block(tag, claim_assigned, selected_track):
 def generate_initial_advice_doc(app_inputs):
     """Generates the Initial Advice Summary Word document."""
     try:
-        # Log app_inputs for debugging
         logger.debug("App inputs in generate_initial_advice_doc: %s", app_inputs)
 
-        # Validate required inputs
         if 'our_ref' not in app_inputs or not app_inputs['our_ref']:
             logger.error("Missing or empty our_ref in app_inputs")
             raise ValueError("Missing or empty our_ref in app_inputs")
 
         doc = Document()
-        style = doc.styles['Normal']
-        style.font.name = 'HelveticaNeueLT Pro 45 Lt'
-        style.font.size = Pt(11)
+        # Define a standard paragraph style
+        obj_styles = doc.styles
+        obj_charstyle = obj_styles.add_style('NormalPara', WD_STYLE_TYPE.PARAGRAPH)
+        obj_font = obj_charstyle.font
+        obj_font.size = Pt(11)
+        obj_font.name = 'Arial' # Changed to Arial for consistency with run font
 
         p = doc.add_paragraph()
         p.alignment = WD_PARAGRAPH_ALIGNMENT.LEFT
         placeholder_map = get_placeholder_map(app_inputs, app_inputs['firm_details'])
 
-        # Verify matter_number exists in placeholder_map
         if 'matter_number' not in placeholder_map:
             logger.error("matter_number not found in placeholder_map")
             raise ValueError("matter_number not found in placeholder_map")
@@ -240,118 +235,134 @@ def generate_fee_table(hourly_rate, client_type):
         ("Associate", hourly_rate * 0.8),
         ("Trainee", hourly_rate * 0.5)
     ]
-    table_content = ""
+    table_content_lines = []
     for role, rate in roles:
-        table_content += f"[#]{role}: £{rate:,.2f} per hour (excl. VAT)[/p]\n"
+        table_content_lines.append(f"{role}: £{rate:,.2f} per hour (excl. VAT)")
     if client_type == "Corporate":
-        table_content += "[#]Note: Corporate clients may be subject to additional administrative fees.[/p]"
-    return table_content
+        table_content_lines.append("Note: Corporate clients may be subject to additional administrative fees.")
+    return table_content_lines # Return as a list of lines
 
 def preprocess_precedent(precedent_content, app_inputs):
     """Preprocesses the precedent text into logical document elements."""
     logical_elements = []
     lines = precedent_content.splitlines()
     i = 0
-    current_block = None
-    block_lines = []
-    block_version = None
-    block_number = None
+    current_block_type = None # 'conditional_client', 'conditional_track', 'general'
+    current_block_tag = None # e.g., 'indiv', 'corp', 'a1', 'u1'
+    current_paragraph_lines = []
+    
+    # Helper to add a completed paragraph block
+    def add_current_paragraph_block():
+        nonlocal current_paragraph_lines
+        if current_paragraph_lines:
+            logical_elements.append({
+                'type': 'paragraph_block',
+                'content_lines': list(current_paragraph_lines), # Use a copy
+                'block_type': current_block_type,
+                'block_tag': current_block_tag
+            })
+            current_paragraph_lines = []
 
     while i < len(lines):
         line = lines[i].strip()
         logger.debug("Preprocessing line %d: %s", i, line)
 
-        if line in ['[indiv]', '[corp]']:
-            if current_block and block_lines:
-                logical_elements.append({
-                    'type': 'paragraph_block',
-                    'content_lines': block_lines,
-                    'version': block_version,
-                    'paragraph_display_number_text': block_number
-                })
-            current_block = line[1:-1]
-            block_lines = []
-            block_version = None
-            block_number = None
-            i += 1
-            continue
-        elif line in ['[/indiv]', '[/corp]']:
-            if current_block and block_lines:
-                logical_elements.append({
-                    'type': 'paragraph_block',
-                    'content_lines': block_lines,
-                    'version': block_version,
-                    'paragraph_display_number_text': block_number
-                })
-            current_block = None
-            block_lines = []
-            block_version = None
-            block_number = None
-            i += 1
-            continue
-        elif re.match(r'\[(a[1-4]|u[1-4])\]', line):
-            if block_lines:
-                logical_elements.append({
-                    'type': 'paragraph_block',
-                    'content_lines': block_lines,
-                    'version': block_version,
-                    'paragraph_display_number_text': block_number
-                })
-                block_lines = []
-            block_version = line[1:-1]
-            block_number = None
-            i += 1
-            continue
-        elif re.match(r'\[/(a[1-4]|u[1-4])\]', line):
-            if block_lines:
-                logical_elements.append({
-                    'type': 'paragraph_block',
-                    'content_lines': block_lines,
-                    'version': block_version,
-                    'paragraph_display_number_text': block_number
-                })
-            block_version = None
-            block_lines = []
-            block_number = None
-            i += 1
-            continue
-
-        if line.startswith('[#]'):
-            if block_lines:
-                logical_elements.append({
-                    'type': 'paragraph_block',
-                    'content_lines': block_lines,
-                    'version': block_version,
-                    'paragraph_display_number_text': block_number
-                })
-                block_lines = []
-            block_number = '[#]'
-            block_lines.append(line)
-        elif line == '[]' or not line:
-            if block_lines:
-                logical_elements.append({
-                    'type': 'paragraph_block',
-                    'content_lines': block_lines,
-                    'version': block_version,
-                    'paragraph_display_number_text': block_number
-                })
-                block_lines = []
-                block_number = None
-            logical_elements.append({'type': 'raw_line', 'content': line})
+        # Handle block start/end tags for client type or court track
+        if re.match(r'\[(indiv|corp|a[1-4]|u[1-4])\]', line):
+            add_current_paragraph_block() # End previous block if any
+            current_block_type = 'conditional_client' if line in ['[indiv]', '[corp]'] else 'conditional_track'
+            current_block_tag = line[1:-1]
+            logger.debug(f"Started new conditional block: {current_block_type}, tag: {current_block_tag}")
+        elif re.match(r'\[/(indiv|corp|a[1-4]|u[1-4])\]', line):
+            add_current_paragraph_block() # End the conditional block
+            current_block_type = None
+            current_block_tag = None
+            logger.debug("Ended conditional block.")
         elif line == '[FEE_TABLE_PLACEHOLDER]':
-            block_lines.append(f"[{app_inputs['fee_table']}]")
-        else:
-            block_lines.append(line)
+            add_current_paragraph_block() # End current text block before inserting table
+            logical_elements.append({
+                'type': 'fee_table',
+                'content': app_inputs['fee_table'], # This is already the processed list of lines
+                'block_type': current_block_type, # Propagate conditional context
+                'block_tag': current_block_tag
+            })
+            logger.debug("Inserted FEE_TABLE_PLACEHOLDER.")
+        elif line == '[]': # Explicit blank line
+            add_current_paragraph_block() # End current text block to ensure blank line is separate
+            logical_elements.append({
+                'type': 'blank_line',
+                'block_type': current_block_type,
+                'block_tag': current_block_tag
+            })
+            logger.debug("Inserted blank line marker.")
+        elif line.startswith('[#]'):
+            add_current_paragraph_block() # End previous paragraph block
+            # Start a new numbered paragraph block
+            current_paragraph_lines.append(line.replace('[#]', '', 1).strip()) # Remove [#] from line content
+            logical_elements.append({
+                'type': 'numbered_paragraph_block',
+                'content_lines': list(current_paragraph_lines),
+                'block_type': current_block_type,
+                'block_tag': current_block_tag
+            })
+            current_paragraph_lines = [] # Reset for next block
+        elif line.startswith('[u]'): # Heading
+            add_current_paragraph_block()
+            current_paragraph_lines.append(line.replace('[u]', '', 1).strip())
+            logical_elements.append({
+                'type': 'heading_block',
+                'content_lines': list(current_paragraph_lines),
+                'block_type': current_block_type,
+                'block_tag': current_block_tag
+            })
+            current_paragraph_lines = []
+        elif line.startswith('[bp]'): # Bullet point
+            add_current_paragraph_block()
+            current_paragraph_lines.append(line.replace('[bp]', '', 1).strip())
+            logical_elements.append({
+                'type': 'bullet_paragraph_block',
+                'content_lines': list(current_paragraph_lines),
+                'block_type': current_block_type,
+                'block_tag': current_block_tag
+            })
+            current_paragraph_lines = []
+        elif re.match(r'^\[([a-zA-Z])\]', line): # Lettered list item
+            add_current_paragraph_block()
+            current_paragraph_lines.append(line)
+            logical_elements.append({
+                'type': 'letter_list_item_block',
+                'content_lines': list(current_paragraph_lines),
+                'block_type': current_block_type,
+                'block_tag': current_block_tag
+            })
+            current_paragraph_lines = []
+        elif re.match(r'^\[(i{1,3}|iv|v|vi|vii)\]', line): # Roman list item
+            add_current_paragraph_block()
+            current_paragraph_lines.append(line)
+            logical_elements.append({
+                'type': 'roman_list_item_block',
+                'content_lines': list(current_paragraph_lines),
+                'block_type': current_block_type,
+                'block_tag': current_block_tag
+            })
+            current_paragraph_lines = []
+        elif not line.strip(): # Empty line (not explicit '[]')
+            add_current_paragraph_block() # Treat as paragraph end for normal text
+            logical_elements.append({
+                'type': 'blank_line',
+                'block_type': current_block_type,
+                'block_tag': current_block_tag
+            })
+        else: # Regular content line
+            current_paragraph_lines.append(line)
+            # if this is the last line or the next line is a special tag, add the block
+            if i == len(lines) - 1 or re.match(r'\[(indiv|corp|a[1-4]|u[1-4]|/\w+|FEE_TABLE_PLACEHOLDER|\[\]|\[#\]|\[u\]|\[bp\]|\[[a-zA-Z]\]|\[i{1,3}|iv|v|vi|vii\])', lines[i+1].strip()):
+                 add_current_paragraph_block()
+
 
         i += 1
 
-    if block_lines:
-        logical_elements.append({
-            'type': 'paragraph_block',
-            'content_lines': block_lines,
-            'version': block_version,
-            'paragraph_display_number_text': block_number
-        })
+    add_current_paragraph_block() # Add any remaining paragraph lines
 
     logger.debug("Logical elements created: %s", logical_elements)
     return logical_elements
@@ -363,106 +374,134 @@ def process_precedent_text(precedent_content, app_inputs, placeholder_map):
         doc.styles['Normal'].font.name = 'HelveticaNeueLT Pro 45 Lt'
         doc.styles['Normal'].font.size = Pt(11)
 
+        # Custom paragraph styles for lists
+        styles = doc.styles
+        # Numbered List Style
+        if 'NumberedList' not in styles:
+            num_style = styles.add_style('NumberedList', WD_STYLE_TYPE.PARAGRAPH)
+            num_style.base_style = styles['Normal']
+            num_format = num_style.paragraph_format
+            num_format.left_indent = Cm(0.7)
+            num_format.first_line_indent = Cm(-0.7)
+            num_format.tab_stops.add_tab_stop(Cm(0.7))
+            num_format.space_after = Pt(6) # Smaller space after for list items
+        
+        # Letter List Style (e.g., (a), (b))
+        if 'LetterList' not in styles:
+            letter_style = styles.add_style('LetterList', WD_STYLE_TYPE.PARAGRAPH)
+            letter_style.base_style = styles['Normal']
+            letter_format = letter_style.paragraph_format
+            letter_format.left_indent = Cm(SUB_LETTER_TEXT_START_CM)
+            letter_format.first_line_indent = Cm(SUB_LETTER_TEXT_INDENT_NO_IND_CM - SUB_LETTER_TEXT_START_CM) # Negative for hanging indent
+            letter_format.tab_stops.add_tab_stop(Cm(SUB_LETTER_TEXT_START_CM))
+            letter_format.space_after = Pt(6)
+
+        # Roman List Style (e.g., (i), (ii))
+        if 'RomanList' not in styles:
+            roman_style = styles.add_style('RomanList', WD_STYLE_TYPE.PARAGRAPH)
+            roman_style.base_style = styles['Normal']
+            roman_format = roman_style.paragraph_format
+            roman_format.left_indent = Cm(SUB_ROMAN_TEXT_START_CM)
+            roman_format.first_line_indent = Cm(SUB_ROMAN_TEXT_INDENT_CM - SUB_ROMAN_TEXT_START_CM) # Negative for hanging indent
+            roman_format.tab_stops.add_tab_stop(Cm(SUB_ROMAN_TEXT_START_CM))
+            roman_format.space_after = Pt(6)
+
+
         logical_elements = preprocess_precedent(precedent_content, app_inputs)
-        in_indiv_block = in_corp_block = False
-        active_track_block = None
+        
+        # Track current conditional block state
+        in_indiv_block = False
+        in_corp_block = False
+        active_track_block_tag = None
 
         for element in logical_elements:
-            if element['type'] == 'raw_line':
-                if element['content'] == '[]' or not element['content']:
-                    if doc.paragraphs:
-                        doc.paragraphs[-1].paragraph_format.space_after = Pt(12)
-                    continue
+            # Check conditional rendering for current element
+            render_this_element = True
+            if element['block_type'] == 'conditional_client':
+                if element['block_tag'] == 'indiv' and app_inputs['client_type'] != 'Individual':
+                    render_this_element = False
+                elif element['block_tag'] == 'corp' and app_inputs['client_type'] != 'Corporate':
+                    render_this_element = False
+            elif element['block_type'] == 'conditional_track':
+                if not should_render_track_block(element['block_tag'], app_inputs['claim_assigned'], app_inputs['selected_track']):
+                    render_this_element = False
+            
+            if not render_this_element:
+                logger.debug(f"Skipping element due to conditional logic: {element['type']}, tag: {element['block_tag']}")
+                continue
+            
+            # Process element based on its type
+            if element['type'] == 'blank_line':
+                # Add an empty paragraph to create a blank line
                 p = doc.add_paragraph()
-                add_formatted_runs(p, element['content'], placeholder_map)
+                p.paragraph_format.space_after = Pt(12) # Ensure space after blank line
                 continue
-
-            block_lines = element['content_lines']
-            block_versioning = element['version']
-            is_numbered_block = element['paragraph_display_number_text'] == '[#]'
-
-            if block_versioning in ['indiv', 'corp']:
-                if block_versioning == 'indiv':
-                    in_indiv_block = app_inputs['client_type'] == 'Individual'
-                elif block_versioning == 'corp':
-                    in_corp_block = app_inputs['client_type'] == 'Corporate'
+            elif element['type'] == 'fee_table':
+                for line in element['content']: # Iterate over lines from generate_fee_table
+                    p = doc.add_paragraph()
+                    add_formatted_runs(p, line, placeholder_map)
+                    p.paragraph_format.space_after = Pt(6) # Small space between fee table lines
+                p.paragraph_format.space_after = Pt(12) # Larger space after the whole table
                 continue
-
-            if block_versioning in ['a1', 'a2', 'a3', 'a4', 'u1', 'u2', 'u3', 'u4']:
-                active_track_block = block_versioning if should_render_track_block(block_versioning, app_inputs['claim_assigned'], app_inputs['selected_track']) else None
-                continue
-
-            if (in_indiv_block and app_inputs['client_type'] != 'Individual') or \
-               (in_corp_block and app_inputs['client_type'] != 'Corporate'):
-                continue
-
-            if active_track_block and not should_render_track_block(active_track_block, app_inputs['claim_assigned'], app_inputs['selected_track']):
-                continue
-
-            first_content_line = True
-            for line in block_lines:
-                if not line.strip():
-                    if doc.paragraphs:
-                        doc.paragraphs[-1].paragraph_format.space_after = Pt(12)
-                    continue
-
-                text_content = line
+            
+            # For all paragraph-based blocks
+            for line_content in element['content_lines']:
                 p = doc.add_paragraph()
                 pf = p.paragraph_format
                 pf.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
-                pf.tab_stops.clear_all()
+                pf.tab_stops.clear_all() # Clear existing tab stops to avoid interference
 
-                is_indented = '[ind]' in text_content
+                is_indented = '[ind]' in line_content
+                cleaned_line_content = line_content.replace('[ind]', '').strip()
+                
+                # Apply base indentation if [ind] is present
                 if is_indented:
-                    text_content = text_content.replace('[ind]', '').lstrip()
+                    pf.left_indent = Cm(INDENT_FOR_IND_TAG_CM)
 
-                has_end_paragraph = '[/p]' in text_content
-                if has_end_paragraph:
-                    text_content = text_content.replace('[/p]', '').rstrip()
-                    pf.space_after = Pt(12)
-
-                if is_numbered_block and first_content_line:
-                    p.style = 'List Number'
-                    pf.left_indent = Cm(0.7)
-                    pf.first_line_indent = Cm(-0.7)
-                    pf.tab_stops.add_tab_stop(Cm(0.7))
-                    text_content = text_content.replace('[#]', '', 1).lstrip()
-                    first_content_line = False
-                elif text_content.startswith('[u]'):
-                    text_content = text_content.replace('[u]', '', 1).lstrip()
+                # Process different block types
+                if element['type'] == 'numbered_paragraph_block':
+                    p.style = 'NumberedList'
+                    add_formatted_runs(p, cleaned_line_content, placeholder_map)
+                elif element['type'] == 'heading_block':
                     p.style = 'Heading 2'
                     pf.space_before = Pt(12)
                     pf.space_after = Pt(6)
-                elif text_content.startswith('[bp]'):
-                    text_content = text_content.replace('[bp]', '', 1).lstrip()
+                    add_formatted_runs(p, cleaned_line_content, placeholder_map)
+                elif element['type'] == 'bullet_paragraph_block':
                     p.style = 'List Bullet'
-                    base_indent = INDENT_FOR_IND_TAG_CM if is_indented else NESTED_BULLET_INDENT_CM
-                    pf.left_indent = Cm(base_indent)
-                    pf.space_after = Pt(6)
-                else:
-                    list_match_letter = re.match(r'^\[([a-zA-Z])\]\s*(.*)', text_content)
-                    list_match_roman = re.match(r'^\[(i{1,3}|iv|v|vi|vii)\]\s*(.*)', text_content)
-                    if list_match_letter:
-                        letter, rest = list_match_letter.groups()
-                        text_content = f"({letter.lower()})\t{rest.lstrip()}"
-                        indent = SUB_LETTER_TEXT_INDENT_NO_IND_CM + INDENT_FOR_IND_TAG_CM if is_indented else SUB_LETTER_TEXT_INDENT_NO_IND_CM
-                        text_indent = SUB_LETTER_TEXT_START_CM + INDENT_FOR_IND_TAG_CM if is_indented else SUB_LETTER_TEXT_START_CM
-                        pf.left_indent = Cm(text_indent)
-                        pf.first_line_indent = Cm(indent - text_indent)
-                        pf.tab_stops.add_tab_stop(Cm(text_indent))
-                    elif list_match_roman:
-                        roman, rest = list_match_roman.groups()
-                        text_content = f"({roman.lower()})\t{rest.lstrip()}"
-                        indent = SUB_ROMAN_TEXT_INDENT_CM + INDENT_FOR_IND_TAG_CM if is_indented else SUB_ROMAN_TEXT_INDENT_CM
-                        text_indent = SUB_ROMAN_TEXT_START_CM + INDENT_FOR_IND_TAG_CM if is_indented else SUB_ROMAN_TEXT_START_CM
-                        pf.left_indent = Cm(text_indent)
-                        pf.first_line_indent = Cm(indent - text_indent)
-                        pf.tab_stops.add_tab_stop(Cm(text_indent))
-                    elif is_indented:
-                        pf.left_indent = Cm(INDENT_FOR_IND_TAG_CM)
+                    # Bullet indentation needs to consider if it's also [ind]
+                    if is_indented:
+                        pf.left_indent = Cm(NESTED_BULLET_INDENT_CM)
+                    else:
+                         pf.left_indent = Cm(0.7) # Standard bullet indent
+                    add_formatted_runs(p, cleaned_line_content, placeholder_map)
+                    pf.space_after = Pt(6) # Smaller space after bullet points
+                elif element['type'] == 'letter_list_item_block':
+                    p.style = 'LetterList'
+                    match = re.match(r'^\[([a-zA-Z])\]\s*(.*)', cleaned_line_content)
+                    if match:
+                        letter, rest = match.groups()
+                        text_to_add = f"({letter.lower()})\t{rest.lstrip()}"
+                        add_formatted_runs(p, text_to_add, placeholder_map)
+                elif element['type'] == 'roman_list_item_block':
+                    p.style = 'RomanList'
+                    match = re.match(r'^\[(i{1,3}|iv|v|vi|vii)\]\s*(.*)', cleaned_line_content)
+                    if match:
+                        roman, rest = match.groups()
+                        text_to_add = f"({roman.lower()})\t{rest.lstrip()}"
+                        add_formatted_runs(p, text_to_add, placeholder_map)
+                else: # General paragraph block or content that wasn't special cased
+                    # Handle [/p] tag for explicit paragraph end with space after
+                    has_end_paragraph = '[/p]' in cleaned_line_content
+                    if has_end_paragraph:
+                        cleaned_line_content = cleaned_line_content.replace('[/p]', '').rstrip()
+                        pf.space_after = Pt(12)
+                    add_formatted_runs(p, cleaned_line_content, placeholder_map)
+                    # Default space after for regular paragraphs if not explicitly set by [/p]
+                    if not has_end_paragraph and pf.space_after == Pt(0):
+                         pf.space_after = Pt(6) # Smaller default space after for continuous text
 
-                add_formatted_runs(p, text_content, placeholder_map)
-
+        # Final check for last paragraph spacing
         if doc.paragraphs:
             if doc.paragraphs[-1].paragraph_format.space_after == Pt(0):
                 doc.paragraphs[-1].paragraph_format.space_after = Pt(6)
@@ -605,14 +644,15 @@ if submitted:
     else:
         costs_text = "[COSTING INFORMATION TO BE CONFIRMED]"
 
-    fee_table = generate_fee_table(hourly_rate, client_type)
+    # generate_fee_table now returns a list of strings
+    fee_table_lines = generate_fee_table(hourly_rate, client_type)
 
     app_inputs = {
         'qu1_dispute_nature': sanitize_input(qu1_dispute_nature),
         'qu2_initial_steps': sanitize_input(qu2_initial_steps),
         'qu3_timescales': sanitize_input(qu3_timescales),
         'qu4_initial_costs_estimate': sanitize_input(costs_text),
-        'fee_table': fee_table,
+        'fee_table': fee_table_lines, # Pass the list of lines
         'client_type': client_type,
         'claim_assigned': claim_assigned_input == "Yes",
         'selected_track': selected_track,
@@ -646,7 +686,8 @@ if submitted:
     except Exception as e:
         st.error(f"Error processing precedent text: {str(e)}")
         logger.error("Error processing precedent text: %s", str(e))
-        raise
+        # This re-raise will stop the app and show detailed error in console for debugging
+        raise 
 
     client_care_doc_io = io.BytesIO()
     doc.save(client_care_doc_io)
