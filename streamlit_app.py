@@ -223,9 +223,7 @@ def preprocess_precedent(precedent_content, app_inputs):
             i += 1
             continue
         elif line in ['[/indiv]', '[/corp]']:
-            if current_block and block
-
-_lines:
+            if current_block and block_lines:
                 logical_elements.append({
                     'type': 'paragraph_block',
                     'content_lines': block_lines,
