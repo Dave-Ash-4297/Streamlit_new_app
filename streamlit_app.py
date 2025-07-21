@@ -97,28 +97,46 @@ def get_placeholder_map(app_inputs, firm_details):
 
 def add_formatted_runs(paragraph, text_line, placeholder_map):
     """Adds text runs to a paragraph, processing inline formatting tags and placeholders."""
-    for placeholder, value in placeholder_map.items():
-        text_line = text_line.replace(placeholder, value)
-    
-    parts = re.split(r'(\[bd\]|\[/bd\]|\[italics\]|\[/italics\]|\[u\]|\[/u\]|\[underline\]|\[/underline\])', text_line)
-    is_bold = is_italic = is_underline = False
-    for part in parts:
-        if not part:
-            continue
-        if part == "[bd]": is_bold = True
-        elif part == "[/bd]": is_bold = False
-        elif part == "[italics]": is_italic = True
-        elif part == "[/italics]": is_italic = False
-        elif part in ["[u]", "[underline]"]: is_underline = True
-        elif part in ["[/u]", "[/underline]"]: is_underline = False
-        else:
-            run = paragraph.add_run(part)
-            run.bold = is_bold
-            run.italic = is_italic
-            run.underline = is_underline
-            run.font.name = 'Arial'
-            run.font.size = Pt(11)
-    logger.debug("Processed formatted runs for text: %s", text_line)
+    try:
+        # Ensure text_line is a string
+        if not isinstance(text_line, str):
+            text_line = str(text_line)
+            logger.warning("Converted non-string text_line to string: %s", text_line)
+
+        # Replace placeholders with their values
+        for placeholder, value in placeholder_map.items():
+            placeholder_pattern = f"{{{placeholder}}}"
+            text_line = text_line.replace(placeholder_pattern, str(value))
+        
+        # Handle formatting tags
+        parts = re.split(r'(\[bd\]|\[/bd\]|\[italics\]|\[/italics\]|\[u\]|\[/u\]|\[underline\]|\[/underline\])', text_line)
+        is_bold = is_italic = is_underline = False
+        for part in parts:
+            if not part:
+                continue
+            if part == "[bd]":
+                is_bold = True
+            elif part == "[/bd]":
+                is_bold = False
+            elif part == "[italics]":
+                is_italic = True
+            elif part == "[/italics]":
+                is_italic = False
+            elif part in ["[u]", "[underline]"]:
+                is_underline = True
+            elif part in ["[/u]", "[/underline]"]:
+                is_underline = False
+            else:
+                run = paragraph.add_run(part)
+                run.bold = is_bold
+                run.italic = is_italic
+                run.underline = is_underline
+                run.font.name = 'Arial'
+                run.font.size = Pt(11)
+        logger.debug("Processed formatted runs for text: %s", text_line)
+    except Exception as e:
+        logger.error("Error in add_formatted_runs for text '%s': %s", text_line, str(e))
+        raise
 
 def should_render_track_block(tag, claim_assigned, selected_track):
     """Determines if a court track block should be rendered based on the tag and inputs."""
@@ -143,41 +161,45 @@ def should_render_track_block(tag, claim_assigned, selected_track):
 
 def generate_initial_advice_doc(app_inputs):
     """Generates the Initial Advice Summary Word document."""
-    doc = Document()
-    style = doc.styles['Normal']
-    style.font.name = 'HelveticaNeueLT Pro 45 Lt'
-    style.font.size = Pt(11)
+    try:
+        doc = Document()
+        style = doc.styles['Normal']
+        style.font.name = 'HelveticaNeueLT Pro 45 Lt'
+        style.font.size = Pt(11)
 
-    p = doc.add_paragraph()
-    p.alignment = WD_PARAGRAPH_ALIGNMENT.LEFT
-    placeholder_map = get_placeholder_map(app_inputs, app_inputs['firm_details'])
-    add_formatted_runs(p, "Initial Advice Summary - Matter Number: {matter_number}")
-    p.paragraph_format.space_after = Pt(12)
+        p = doc.add_paragraph()
+        p.alignment = WD_PARAGRAPH_ALIGNMENT.LEFT
+        placeholder_map = get_placeholder_map(app_inputs, app_inputs['firm_details'])
+        add_formatted_runs(p, "Initial Advice Summary - Matter Number: {matter_number}")
+        p.paragraph_format.space_after = Pt(12)
 
-    table = doc.add_table(rows=3, cols=2)
-    table.style = 'Table Grid'
-    table.autofit = True
-    rows = [
-        ("Date of Advice", app_inputs.get('initial_advice_date', '').strftime('%d/%m/%Y')),
-        ("Method of Advice", app_inputs.get('initial_advice_method', '')),
-        ("Advice Given", app_inputs.get('initial_advice_content', ''))
-    ]
-    for i, (label, value) in enumerate(rows):
-        cells = table.rows[i].cells
-        cells[0].text = label
-        cells[1].text = value
-        for cell in cells:
-            cell.paragraphs[0].style.font.name = 'Arial'
-            cell.paragraphs[0].style.font.size = Pt(11)
-            cell.paragraphs[0].alignment = WD_PARAGRAPH_ALIGNMENT.LEFT
-    table.columns[0].width = Cm(4.5)
-    table.columns[1].width = Cm(10.0)
+        table = doc.add_table(rows=3, cols=2)
+        table.style = 'Table Grid'
+        table.autofit = True
+        rows = [
+            ("Date of Advice", app_inputs.get('initial_advice_date', '').strftime('%d/%m/%Y')),
+            ("Method of Advice", app_inputs.get('initial_advice_method', '')),
+            ("Advice Given", app_inputs.get('initial_advice_content', ''))
+        ]
+        for i, (label, value) in enumerate(rows):
+            cells = table.rows[i].cells
+            cells[0].text = label
+            cells[1].text = value
+            for cell in cells:
+                cell.paragraphs[0].style.font.name = 'Arial'
+                cell.paragraphs[0].style.font.size = Pt(11)
+                cell.paragraphs[0].alignment = WD_PARAGRAPH_ALIGNMENT.LEFT
+        table.columns[0].width = Cm(4.5)
+        table.columns[1].width = Cm(10.0)
 
-    doc_io = io.BytesIO()
-    doc.save(doc_io)
-    doc_io.seek(0)
-    logger.info("Initial Advice Summary document generated.")
-    return doc_io
+        doc_io = io.BytesIO()
+        doc.save(doc_io)
+        doc_io.seek(0)
+        logger.info("Initial Advice Summary document generated.")
+        return doc_io
+    except Exception as e:
+        logger.error("Error generating Initial Advice Summary: %s", str(e))
+        raise
 
 def generate_fee_table(hourly_rate, client_type):
     """Generates a fee table as a string based on hourly rate and client type."""
@@ -237,16 +259,34 @@ def preprocess_precedent(precedent_content, app_inputs):
             i += 1
             continue
         elif re.match(r'\[(a[1-4]|u[1-4])\]', line):
+            if current_block and block_lines:
+                logical_elements.append({
+                    'type': 'paragraph_block',
+                    'content_lines': block_lines,
+                    'version': block_version,
+                    'paragraph_display_number_text': block_number
+                })
+                block_lines = []
             block_version = line[1:-1]
+            block_number = None
             i += 1
             continue
         elif re.match(r'\[/(a[1-4]|u[1-4])\]', line):
+            if current_block and block_lines:
+                logical_elements.append({
+                    'type': 'paragraph_block',
+                    'content_lines': block_lines,
+                    'version': block_version,
+                    'paragraph_display_number_text': block_number
+                })
             block_version = None
+            block_lines = []
+            block_number = None
             i += 1
             continue
 
         if line.startswith('[#]'):
-            if current_block and block_lines:
+            if block_lines:
                 logical_elements.append({
                     'type': 'paragraph_block',
                     'content_lines': block_lines,
@@ -257,7 +297,7 @@ def preprocess_precedent(precedent_content, app_inputs):
             block_number = '[#]'
             block_lines.append(line)
         elif line == '[]' or not line:
-            if current_block and block_lines:
+            if block_lines:
                 logical_elements.append({
                     'type': 'paragraph_block',
                     'content_lines': block_lines,
@@ -272,7 +312,7 @@ def preprocess_precedent(precedent_content, app_inputs):
 
         i += 1
 
-    if current_block and block_lines:
+    if block_lines:
         logical_elements.append({
             'type': 'paragraph_block',
             'content_lines': block_lines,
@@ -317,9 +357,13 @@ def process_precedent_text(precedent_content, app_inputs, placeholder_map):
             if not should_render_track_block(block_versioning, app_inputs['claim_assigned'], app_inputs['selected_track']):
                 continue
             active_track_block = block_versioning
+            continue
 
         if (in_indiv_block and app_inputs['client_type'] != 'Individual') or \
            (in_corp_block and app_inputs['client_type'] != 'Corporate'):
+            continue
+
+        if active_track_block and not should_render_track_block(active_track_block, app_inputs['claim_assigned'], app_inputs['selected_track']):
             continue
 
         first_content_line = True
@@ -408,7 +452,6 @@ st.markdown("""
         border-radius: 5px;
         padding: 10px 20px;
         border: 1px solid #005A9E;
-Made by Grok, created by xAI
         font-size: 16px;
     }
     .stButton>button:hover {
