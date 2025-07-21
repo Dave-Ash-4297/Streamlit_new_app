@@ -362,7 +362,13 @@ def process_precedent_text(precedent_content, app_inputs, placeholder_map):
         abstract_num_id = 100
         num_instance_id = 1
 
-        if not numbering_elm.xpath(f'w:abstractNum[@w:abstractNumId="{abstract_num_id}"]', namespaces=numbering_elm.nsmap):
+        # Check for existing abstractNum without namespaces
+        abstract_nums = numbering_elm.findall(qn('w:abstractNum'))
+        abstract_num_exists = any(
+            elem.get(qn('w:abstractNumId')) == str(abstract_num_id)
+            for elem in abstract_nums
+        )
+        if not abstract_num_exists:
             abstract_num = OxmlElement('w:abstractNum')
             abstract_num.set(qn('w:abstractNumId'), str(abstract_num_id))
             abstract_num.set(qn('w:nsid'), '{0:08X}'.format(abstract_num_id))
@@ -417,7 +423,13 @@ def process_precedent_text(precedent_content, app_inputs, placeholder_map):
 
             numbering_elm.append(abstract_num)
 
-        if not numbering_elm.xpath(f'w:num[@w:numId="{num_instance_id}"]', namespaces=numbering_elm.nsmap):
+        # Check for existing num without namespaces
+        nums = numbering_elm.findall(qn('w:num'))
+        num_exists = any(
+            elem.get(qn('w:numId')) == str(num_instance_id)
+            for elem in nums
+        )
+        if not num_exists:
             new_num = OxmlElement('w:num')
             new_num.set(qn('w:numId'), str(num_instance_id))
             abstract_num_id_ref = OxmlElement('w:abstractNumId')
@@ -451,8 +463,9 @@ def process_precedent_text(precedent_content, app_inputs, placeholder_map):
             elif element['type'] == 'fee_table':
                 for fee_line in element['content_lines']:
                     p = doc.add_paragraph(style='NumberedListCustom')
-                    p.paragraph_format.numId = num_instance_id
-                    p.paragraph_format.ilvl = 0
+                    num_pr = p._element.get_or_add_pPr().get_or_add_numPr()
+                    num_pr.get_or_add_numId().val = num_instance_id
+                    num_pr.get_or_add_ilvl().val = 0
                     pf = p.paragraph_format
                     pf.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
                     add_formatted_runs(p, fee_line, placeholder_map)
@@ -468,8 +481,9 @@ def process_precedent_text(precedent_content, app_inputs, placeholder_map):
 
             elif element['type'] == 'numbered_list_item':
                 p = doc.add_paragraph(style='NumberedListCustom')
-                p._element.pPr.numPr.numId.val = num_instance_id
-                p._element.pPr.numPr.ilvl.val = 0
+                num_pr = p._element.get_or_add_pPr().get_or_add_numPr()
+                num_pr.get_or_add_numId().val = num_instance_id
+                num_pr.get_or_add_ilvl().val = 0
                 pf = p.paragraph_format
                 pf.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
                 text_content = element['content_lines'][0]
@@ -485,8 +499,9 @@ def process_precedent_text(precedent_content, app_inputs, placeholder_map):
 
             elif element['type'] == 'letter_list_item':
                 p = doc.add_paragraph(style='LetterListCustom')
-                p._element.pPr.numPr.numId.val = num_instance_id
-                p._element.pPr.numPr.ilvl.val = 1
+                num_pr = p._element.get_or_add_pPr().get_or_add_numPr()
+                num_pr.get_or_add_numId().val = num_instance_id
+                num_pr.get_or_add_ilvl().val = 1
                 pf = p.paragraph_format
                 pf.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
                 text_content = element['content_lines'][0]
@@ -502,8 +517,9 @@ def process_precedent_text(precedent_content, app_inputs, placeholder_map):
 
             elif element['type'] == 'roman_list_item':
                 p = doc.add_paragraph(style='RomanListCustom')
-                p._element.pPr.numPr.numId.val = num_instance_id
-                p._element.pPr.numPr.ilvl.val = 2
+                num_pr = p._element.get_or_add_pPr().get_or_add_numPr()
+                num_pr.get_or_add_numId().val = num_instance_id
+                num_pr.get_or_add_ilvl().val = 2
                 pf = p.paragraph_format
                 pf.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
                 text_content = element['content_lines'][0]
@@ -519,8 +535,9 @@ def process_precedent_text(precedent_content, app_inputs, placeholder_map):
 
             elif element['type'] == 'bullet_list_item':
                 p = doc.add_paragraph(style='BulletListCustom')
-                p._element.pPr.numPr.numId.val = num_instance_id
-                p._element.pPr.numPr.ilvl.val = 3
+                num_pr = p._element.get_or_add_pPr().get_or_add_numPr()
+                num_pr.get_or_add_numId().val = num_instance_id
+                num_pr.get_or_add_ilvl().val = 3
                 pf = p.paragraph_format
                 pf.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
                 text_content = element['content_lines'][0]
