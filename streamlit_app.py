@@ -11,7 +11,7 @@ import zipfile
 import logging
 import html
 
-# --- Setup Logging, Constants, and Utility Functions (Unchanged) ---
+# --- Setup Logging, Constants, and Utility Functions ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
@@ -22,8 +22,7 @@ SUB_LIST_TEXT_START_CM = 1.4
 SUB_ROMAN_TEXT_START_CM = 2.1
 
 def sanitize_input(text):
-    if not isinstance(text, str):
-        text = str(text)
+    if not isinstance(text, str): text = str(text)
     return html.escape(text)
 
 @st.cache_data
@@ -86,10 +85,8 @@ def add_formatted_runs(paragraph, text_line, placeholder_map):
             for i, line_part in enumerate(part.split('\n')):
                 if i > 0: paragraph.add_run().add_break()
                 run = paragraph.add_run(line_part)
-                run.bold = is_bold
-                run.underline = is_underline
-                run.font.name = 'Arial'
-                run.font.size = Pt(11)
+                run.bold, run.underline = is_bold, is_underline
+                run.font.name, run.font.size = 'Arial', Pt(11)
 
 def should_render_track_block(tag, claim_assigned, selected_track):
     tag_map = {'a1': (True, "Small Claims Track"), 'a2': (True, "Fast Track"), 'a3': (True, "Intermediate Track"), 'a4': (True, "Multi Track"), 'u1': (False, "Small Claims Track"), 'u2': (False, "Fast Track"), 'u3': (False, "Intermediate Track"), 'u4': (False, "Multi Track")}
@@ -194,9 +191,10 @@ def process_precedent_text(precedent_content, app_inputs, placeholder_map):
                 p = doc.add_paragraph()
                 pPr = p._p.get_or_add_pPr()
                 numPr = pPr.get_or_add_numPr()
-                numPr.get_or_add_ilvl().val, numPr.get_or_add_numId().val = str(level), str(num_instance_id)
+                # These values MUST be integers, not strings. This was the final bug.
+                numPr.get_or_add_ilvl().val = level
+                numPr.get_or_add_numId().val = num_instance_id
                 add_formatted_runs(p, text, placeholder_map)
-                # FIX: Set paragraph properties on separate lines.
                 p.paragraph_format.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
                 p.paragraph_format.space_after = Pt(6)
 
@@ -206,7 +204,6 @@ def process_precedent_text(precedent_content, app_inputs, placeholder_map):
             elif element['type'] == 'heading':
                 p = doc.add_paragraph()
                 add_formatted_runs(p, f"<ins>{content}</ins>", placeholder_map)
-                # FIX: Set paragraph properties on separate lines.
                 p.paragraph_format.space_before = Pt(12)
                 p.paragraph_format.space_after = Pt(6)
             elif element['type'] == 'numbered_list_item': add_list_item(0, content)
@@ -217,7 +214,6 @@ def process_precedent_text(precedent_content, app_inputs, placeholder_map):
                 cleaned_content = content.replace('[ind]', '').strip()
                 if '[ind]' in content: p.paragraph_format.left_indent = Cm(INDENT_FOR_IND_TAG_CM)
                 add_formatted_runs(p, cleaned_content, placeholder_map)
-                # FIX: Set paragraph properties on separate lines.
                 p.paragraph_format.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
                 p.paragraph_format.space_after = Pt(12)
         return doc
@@ -240,7 +236,7 @@ with st.form("input_form"):
         letter_date = st.date_input("Letter Date", datetime.today())
     with c2:
         client_name_input = st.text_input("Client Full Name / Company Name", "Mr. John Smith")
-        client_salutation_name = st.text_input("Salutation Name (for 'Dear ...')", "John")
+        client_salutation_name = st.text_input("Salutation (for 'Dear ...' and address block)", "Mr. Smith")
         client_address_line1 = st.text_input("Address Line 1", "123 Example Street")
         client_address_line2 = st.text_input("Address Line 2 (optional)", "SomeTown")
         client_postcode = st.text_input("Postcode", "EX4 MPL")
@@ -255,7 +251,7 @@ with st.form("input_form"):
         initial_advice_date = st.date_input("Date", datetime.today())
     with c2:
         st.subheader("Case Track")
-        claim_assigned_input = st.radio("Is claim already assigned?", ("Yes", "No"), horizontal=True)
+        claim_assigned_input = st.radio("Is claim already assigned?", ("Yes", "No"), horizontal=True, index=1)
         selected_track = st.selectbox("Which track applies?", ["Small Claims Track", "Fast Track", "Intermediate Track", "Multi Track"])
 
     st.header("3. Dynamic Content")
@@ -267,7 +263,8 @@ with st.form("input_form"):
     hourly_rate = st.number_input("Your Hourly Rate (£)", 295)
     cost_type_is_range = st.toggle("Use a cost range", True)
     if cost_type_is_range:
-        lower_cost, upper_cost = st.number_input("Lower £", float(hourly_rate * 2)), st.number_input("Upper £", float(hourly_rate * 3))
+        lower_cost = st.number_input("Lower £", float(hourly_rate * 2))
+        upper_cost = st.number_input("Upper £", float(hourly_rate * 3))
     else:
         fixed_cost = st.number_input("Fixed cost £", float(hourly_rate * 2.5))
 
