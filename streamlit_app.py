@@ -55,7 +55,6 @@ def load_precedent_text():
         return ""
 
 def get_placeholder_map(app_inputs, firm_details):
-    # This function is correct and unchanged
     placeholders = {
         'qu1_dispute_nature': app_inputs.get('qu1_dispute_nature', ''),
         'qu2_initial_steps': app_inputs.get('qu2_initial_steps', ''),
@@ -66,7 +65,6 @@ def get_placeholder_map(app_inputs, firm_details):
         'your_ref': str(app_inputs.get('your_ref', '')),
         'letter_date': str(app_inputs.get('letter_date', '')),
         'client_name_input': str(app_inputs.get('client_name_input', '')),
-        # FIX: Added a salutation placeholder for "Dear {client_salutation},"
         'client_salutation': str(app_inputs.get('client_salutation', '')),
         'client_address_line1': str(app_inputs.get('client_address_line1', '')),
         'client_address_line2_conditional': str(app_inputs.get('client_address_line2_conditional', '')),
@@ -79,7 +77,6 @@ def get_placeholder_map(app_inputs, firm_details):
     return placeholders
 
 def add_formatted_runs(paragraph, text_line, placeholder_map):
-    # This function is correct and unchanged
     processed_text = text_line
     for placeholder, value in placeholder_map.items():
         processed_text = processed_text.replace(f"{{{placeholder}}}", str(value))
@@ -100,17 +97,14 @@ def add_formatted_runs(paragraph, text_line, placeholder_map):
                 run.font.size = Pt(11)
 
 def should_render_track_block(tag, claim_assigned, selected_track):
-    # This function is correct and unchanged
     tag_map = {'a1': (True, "Small Claims Track"), 'a2': (True, "Fast Track"), 'a3': (True, "Intermediate Track"), 'a4': (True, "Multi Track"), 'u1': (False, "Small Claims Track"), 'u2': (False, "Fast Track"), 'u3': (False, "Intermediate Track"), 'u4': (False, "Multi Track")}
     expected = tag_map.get(tag)
     if not expected: return False
     return claim_assigned == expected[0] and selected_track == expected[1]
 
-# --- Document Generation Functions (Unchanged) ---
 def generate_initial_advice_doc(app_inputs, placeholder_map):
     doc = Document()
-    doc.styles['Normal'].font.name = 'Arial'
-    doc.styles['Normal'].font.size = Pt(11)
+    doc.styles['Normal'].font.name, doc.styles['Normal'].font.size = 'Arial', Pt(11)
     p = doc.add_paragraph()
     add_formatted_runs(p, "Initial Advice Summary - Matter Number: {matter_number}", placeholder_map)
     p.paragraph_format.space_after = Pt(12)
@@ -118,8 +112,7 @@ def generate_initial_advice_doc(app_inputs, placeholder_map):
     table.style = 'Table Grid'
     rows_data = [("Date of Advice", app_inputs['initial_advice_date'].strftime('%d/%m/%Y') if app_inputs.get('initial_advice_date') else ''), ("Method of Advice", app_inputs.get('initial_advice_method', '')), ("Advice Given", app_inputs.get('initial_advice_content', ''))]
     for i, (label, value) in enumerate(rows_data):
-        table.rows[i].cells[0].text = label
-        table.rows[i].cells[1].text = value
+        table.rows[i].cells[0].text, table.rows[i].cells[1].text = label, value
     doc_io = io.BytesIO()
     doc.save(doc_io)
     doc_io.seek(0)
@@ -129,36 +122,54 @@ def generate_fee_table(hourly_rate):
     roles = [("Partner", hourly_rate * 1.5), ("Senior Associate", hourly_rate), ("Associate", hourly_rate * 0.8), ("Trainee", hourly_rate * 0.5)]
     return [f"{role}: £{rate:,.2f} per hour (excl. VAT)" for role, rate in roles]
 
-# --- Precedent Parsing (Unchanged) ---
 def preprocess_precedent(precedent_content, app_inputs):
-    logical_elements, lines, i, current_block_tag = [], precedent_content.splitlines(), 0, None
+    logical_elements = []
+    lines = precedent_content.splitlines()
+    i = 0
+    current_block_tag = None
     while i < len(lines):
-        line, stripped_line = lines[i], lines[i].strip()
-        match_start_tag, match_end_tag = re.match(r'\[(indiv|corp|a[1-4]|u[1-4])\]', stripped_line), re.match(r'\[/(indiv|corp|a[1-4]|u[1-4])\]', stripped_line)
-        match_heading, match_numbered_list = re.match(r'^<ins>(.*)</ins>$', stripped_line), re.match(r'^(\d+)\.\s*(.*)', stripped_line)
-        match_letter_list, match_roman_list = re.match(r'^<a>\s*(.*)', stripped_line), re.match(r'^<i>\s*(.*)', stripped_line)
+        line = lines[i]
+        stripped_line = line.strip()
+        
+        match_start_tag = re.match(r'\[(indiv|corp|a[1-4]|u[1-4])\]', stripped_line)
+        match_end_tag = re.match(r'\[/(indiv|corp|a[1-4]|u[1-4])\]', stripped_line)
+        match_heading = re.match(r'^<ins>(.*)</ins>$', stripped_line)
+        match_numbered_list = re.match(r'^(\d+)\.\s*(.*)', stripped_line)
+        match_letter_list = re.match(r'^<a>\s*(.*)', stripped_line)
+        match_roman_list = re.match(r'^<i>\s*(.*)', stripped_line)
+        
         element = None
-        if match_start_tag: current_block_tag = match_start_tag.group(1)
-        elif match_end_tag: current_block_tag = None
-        elif stripped_line == '[FEE_TABLE_PLACEHOLDER]': element = {'type': 'fee_table', 'content_lines': app_inputs['fee_table']}
-        elif match_heading: element = {'type': 'heading', 'content_lines': [match_heading.group(1)]}
-        elif match_numbered_list: element = {'type': 'numbered_list_item', 'content_lines': [match_numbered_list.group(2)]}
-        elif match_letter_list: element = {'type': 'letter_list_item', 'content_lines': [match_letter_list.group(1)]}
-        elif match_roman_list: element = {'type': 'roman_list_item', 'content_lines': [match_roman_list.group(1)]}
-        elif not stripped_line: element = {'type': 'blank_line', 'content_lines': []}
-        else: element = {'type': 'general_paragraph', 'content_lines': [line]}
-        if element: element['block_tag'], logical_elements.append(element) = current_block_tag, element
+        if match_start_tag:
+            current_block_tag = match_start_tag.group(1)
+        elif match_end_tag:
+            current_block_tag = None
+        elif stripped_line == '[FEE_TABLE_PLACEHOLDER]':
+            element = {'type': 'fee_table', 'content_lines': app_inputs['fee_table']}
+        elif match_heading:
+            element = {'type': 'heading', 'content_lines': [match_heading.group(1)]}
+        elif match_numbered_list:
+            element = {'type': 'numbered_list_item', 'content_lines': [match_numbered_list.group(2)]}
+        elif match_letter_list:
+            element = {'type': 'letter_list_item', 'content_lines': [match_letter_list.group(1)]}
+        elif match_roman_list:
+            element = {'type': 'roman_list_item', 'content_lines': [match_roman_list.group(1)]}
+        elif not stripped_line:
+            element = {'type': 'blank_line', 'content_lines': []}
+        else:
+            element = {'type': 'general_paragraph', 'content_lines': [line]}
+            
+        if element:
+            # FIX: This is the corrected, valid Python syntax.
+            element['block_tag'] = current_block_tag
+            logical_elements.append(element)
+            
         i += 1
     return logical_elements
 
-# --- Core Document Processing ---
 def process_precedent_text(precedent_content, app_inputs, placeholder_map):
     try:
         doc = Document()
-        doc.styles['Normal'].font.name = 'Arial'
-        doc.styles['Normal'].font.size = Pt(11)
-
-        # FIX: This block correctly creates the list definitions using the proper OXML methods.
+        doc.styles['Normal'].font.name, doc.styles['Normal'].font.size = 'Arial', Pt(11)
         numbering_elm = doc.part.numbering_part.element
         abstract_num_id, num_instance_id = 10, 1
 
@@ -199,10 +210,8 @@ def process_precedent_text(precedent_content, app_inputs, placeholder_map):
             render_this_element = True
             tag = element.get('block_tag')
             if tag:
-                if tag in ['indiv', 'corp']:
-                    render_this_element = (tag == 'indiv' and app_inputs['client_type'] == 'Individual') or (tag == 'corp' and app_inputs['client_type'] == 'Corporate')
-                else:
-                    render_this_element = should_render_track_block(tag, app_inputs['claim_assigned'], app_inputs['selected_track'])
+                if tag in ['indiv', 'corp']: render_this_element = (tag == 'indiv' and app_inputs['client_type'] == 'Individual') or (tag == 'corp' and app_inputs['client_type'] == 'Corporate')
+                else: render_this_element = should_render_track_block(tag, app_inputs['claim_assigned'], app_inputs['selected_track'])
             if not render_this_element: continue
 
             content = element['content_lines'][0] if element['content_lines'] else ""
@@ -211,11 +220,9 @@ def process_precedent_text(precedent_content, app_inputs, placeholder_map):
                 p = doc.add_paragraph()
                 pPr = p._p.get_or_add_pPr()
                 numPr = pPr.get_or_add_numPr()
-                numPr.get_or_add_ilvl().val = str(level)
-                numPr.get_or_add_numId().val = str(num_instance_id)
+                numPr.get_or_add_ilvl().val, numPr.get_or_add_numId().val = str(level), str(num_instance_id)
                 add_formatted_runs(p, text, placeholder_map)
-                p.paragraph_format.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
-                p.paragraph_format.space_after = Pt(6)
+                p.paragraph_format.alignment, p.paragraph_format.space_after = WD_PARAGRAPH_ALIGNMENT.JUSTIFY, Pt(6)
 
             if element['type'] == 'blank_line': doc.add_paragraph()
             elif element['type'] == 'fee_table':
@@ -238,7 +245,6 @@ def process_precedent_text(precedent_content, app_inputs, placeholder_map):
         logger.error(f"Error processing precedent text: {e}", exc_info=True)
         raise
 
-# --- Streamlit App UI (and Submission Logic) ---
 st.set_page_config(layout="wide", page_title="Ramsdens Client Care Letter Generator")
 st.title("Ramsdens Client Care Letter Generator")
 
