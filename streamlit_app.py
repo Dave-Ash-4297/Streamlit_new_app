@@ -198,7 +198,7 @@ def process_precedent_text(precedent_content, app_inputs, placeholder_map):
                 p.paragraph_format.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
                 p.paragraph_format.space_after = Pt(6)
 
-            if element['type'] == 'blank_line': doc.add_paragraph()
+            if element['type'] == 'blank_line': continue #doc.add_paragraph()
             elif element['type'] == 'fee_table':
                 for fee_line in element['content_lines']: add_list_item(0, fee_line)
             elif element['type'] == 'heading':
