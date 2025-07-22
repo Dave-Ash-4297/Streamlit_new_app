@@ -22,8 +22,6 @@ SUB_LIST_TEXT_START_CM = 1.4
 SUB_ROMAN_TEXT_START_CM = 2.1
 
 def sanitize_input(text):
-    # This version is CORRECT because it does NOT replace newlines with spaces.
-    # It preserves the user's formatting from text areas.
     if not isinstance(text, str): text = str(text)
     return html.escape(text)
 
@@ -72,7 +70,6 @@ def get_placeholder_map(app_inputs, firm_details):
     return placeholders
 
 def add_formatted_runs(paragraph, text_line, placeholder_map):
-    # This version is CORRECT. It handles placeholders, bold (<bd>), and underline (<ins>) as inline styles.
     processed_text = text_line
     for placeholder, value in placeholder_map.items():
         processed_text = processed_text.replace(f"{{{placeholder}}}", str(value))
@@ -151,11 +148,19 @@ def process_precedent_text(precedent_content, app_inputs, placeholder_map):
         abstract_num.set(qn('w:abstractNumId'), str(abstract_num_id))
 
         def create_level(ilvl, numFmt, lvlText, left_indent):
-            lvl = OxmlElement('w:lvl'); lvl.set(qn('w:ilvl'), str(ilvl))
-            numFmt_el = OxmlElement('w:numFmt'); numFmt_el.set(qn('w:val'), numFmt); lvl.append(numFmt_el)
-            lvlText_el = OxmlElement('w:lvlText'); lvlText_el.set(qn('w:val'), lvlText); lvl.append(lvlText_el)
+            lvl = OxmlElement('w:lvl')
+            lvl.set(qn('w:ilvl'), str(ilvl))
+            numFmt_el = OxmlElement('w:numFmt')
+            numFmt_el.set(qn('w:val'), numFmt)
+            lvl.append(numFmt_el)
+            lvlText_el = OxmlElement('w:lvlText')
+            lvlText_el.set(qn('w:val'), lvlText)
+            lvl.append(lvlText_el)
             pPr = OxmlElement('w:pPr')
-            ind = OxmlElement('w:ind'); ind.set(qn('w:left'), str(left_indent.twips)); ind.set(qn('w:hanging'), str(Cm(MARKER_OFFSET_CM).twips)); pPr.append(ind)
+            ind = OxmlElement('w:ind')
+            ind.set(qn('w:left'), str(left_indent.twips))
+            ind.set(qn('w:hanging'), str(Cm(MARKER_OFFSET_CM).twips))
+            pPr.append(ind)
             lvl.append(pPr)
             return lvl
 
@@ -164,8 +169,11 @@ def process_precedent_text(precedent_content, app_inputs, placeholder_map):
         abstract_num.append(create_level(2, 'lowerRoman', '%3.', Cm(SUB_ROMAN_TEXT_START_CM)))
         numbering_elm.append(abstract_num)
 
-        num = OxmlElement('w:num'); num.set(qn('w:numId'), str(num_instance_id))
-        abstract_num_id_ref = OxmlElement('w:abstractNumId'); abstract_num_id_ref.set(qn('w:val'), str(abstract_num_id)); num.append(abstract_num_id_ref)
+        num = OxmlElement('w:num')
+        num.set(qn('w:numId'), str(num_instance_id))
+        abstract_num_id_ref = OxmlElement('w:abstractNumId')
+        abstract_num_id_ref.set(qn('w:val'), str(abstract_num_id))
+        num.append(abstract_num_id_ref)
         numbering_elm.append(num)
 
         logical_elements = preprocess_precedent(precedent_content, app_inputs)
@@ -183,19 +191,21 @@ def process_precedent_text(precedent_content, app_inputs, placeholder_map):
                 p = doc.add_paragraph()
                 pPr = p._p.get_or_add_pPr()
                 numPr = pPr.get_or_add_numPr()
-                numPr.get_or_add_ilvl().val, numPr.get_or_add_numId().val = level, num_instance_id
+                # These values MUST be integers, not strings. This was the final bug.
+                numPr.get_or_add_ilvl().val = level
+                numPr.get_or_add_numId().val = num_instance_id
                 add_formatted_runs(p, text, placeholder_map)
                 p.paragraph_format.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
                 p.paragraph_format.space_after = Pt(6)
 
-            if element['type'] == 'blank_line': continue
+            if element['type'] == 'blank_line': continue #doc.add_paragraph()
             elif element['type'] == 'fee_table':
                 for fee_line in element['content_lines']: add_list_item(0, fee_line)
             elif element['type'] == 'heading':
                 p = doc.add_paragraph()
-                # This is the CORRECT way to render a heading, reusing the main formatting function.
                 add_formatted_runs(p, f"<ins>{content}</ins>", placeholder_map)
-                p.paragraph_format.space_before, p.paragraph_format.space_after = Pt(12), Pt(6)
+                p.paragraph_format.space_before = Pt(12)
+                p.paragraph_format.space_after = Pt(6)
             elif element['type'] == 'numbered_list_item': add_list_item(0, content)
             elif element['type'] == 'letter_list_item': add_list_item(1, content)
             elif element['type'] == 'roman_list_item': add_list_item(2, content)
@@ -226,7 +236,7 @@ with st.form("input_form"):
         letter_date = st.date_input("Letter Date", datetime.today())
     with c2:
         client_name_input = st.text_input("Client Full Name / Company Name", "Mr. John Smith")
-        client_salutation_name = st.text_input("Salutation (for address block & 'Dear...')", "Mr. Smith")
+        client_salutation_name = st.text_input("Salutation (for 'Dear ...' and address block)", "Mr. Smith")
         client_address_line1 = st.text_input("Address Line 1", "123 Example Street")
         client_address_line2 = st.text_input("Address Line 2 (optional)", "SomeTown")
         client_postcode = st.text_input("Postcode", "EX4 MPL")
@@ -248,6 +258,7 @@ with st.form("input_form"):
     qu1_dispute_nature = st.text_area('Dispute Nature', "a contractual matter...", height=75)
     qu2_initial_steps = st.text_area('Initial Work', "review documentation...", height=100)
     qu3_timescales = st.text_area("Estimated Timescales", "approx two to four weeks...", height=100)
+    
     st.subheader("Estimated Initial Costs")
     hourly_rate = st.number_input("Your Hourly Rate (£)", 295)
     cost_type_is_range = st.toggle("Use a cost range", True)
@@ -272,8 +283,7 @@ if submitted:
         'client_address_line1': sanitize_input(client_address_line1),
         'client_address_line2_conditional': sanitize_input(client_address_line2) if client_address_line2 else "",
         'client_postcode': sanitize_input(client_postcode), 'name': sanitize_input(firm_details["person_responsible_name"]),
-        'initial_advice_content': initial_advice_content, # Do not sanitize newlines for the table
-        'initial_advice_method': initial_advice_method,
+        'initial_advice_content': initial_advice_content, 'initial_advice_method': initial_advice_method,
         'initial_advice_date': initial_advice_date, 'firm_details': firm_details
     }
     placeholder_map = get_placeholder_map(app_inputs, firm_details)
