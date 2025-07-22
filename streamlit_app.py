@@ -26,7 +26,6 @@ SUB_ROMAN_TEXT_START_CM = 2.1
 def sanitize_input(text):
     if not isinstance(text, str):
         text = str(text)
-    # Only escape HTML, don't replace newlines as they are handled in paragraph logic
     return html.escape(text)
 
 # --- Cached Data Loading ---
@@ -49,7 +48,6 @@ def load_firm_details():
 def load_precedent_text():
     try:
         with open("precedent.txt", "r", encoding="utf-8") as f:
-            # We don't strip() the content to preserve initial newlines if any
             content = f.read()
             logger.info("Successfully loaded precedent.txt")
             return content
@@ -72,7 +70,6 @@ def get_placeholder_map(app_inputs, firm_details):
         'your_ref': str(app_inputs.get('your_ref', '')),
         'letter_date': str(app_inputs.get('letter_date', '')),
         'client_name_input': str(app_inputs.get('client_name_input', '')),
-        # FIX: Reverted to using separate address line placeholders to match precedent.txt
         'client_address_line1': str(app_inputs.get('client_address_line1', '')),
         'client_address_line2_conditional': str(app_inputs.get('client_address_line2_conditional', '')),
         'client_postcode': str(app_inputs.get('client_postcode', '')),
@@ -84,34 +81,28 @@ def get_placeholder_map(app_inputs, firm_details):
     return placeholders
 
 def add_formatted_runs(paragraph, text_line, placeholder_map):
-    try:
-        processed_text = text_line
-        for placeholder, value in placeholder_map.items():
-            processed_text = processed_text.replace(f"{{{placeholder}}}", str(value))
+    processed_text = text_line
+    for placeholder, value in placeholder_map.items():
+        processed_text = processed_text.replace(f"{{{placeholder}}}", str(value))
 
-        # FIX: Updated regex to match markers from precedent.txt (<ins>, <bd>)
-        parts = re.split(r'(<bd>|</bd>|<ins>|</ins>)', processed_text)
-        is_bold = is_underline = False
+    parts = re.split(r'(<bd>|</bd>|<ins>|</ins>)', processed_text)
+    is_bold = is_underline = False
 
-        for part in parts:
-            if not part: continue
-            if part == "<bd>": is_bold = True
-            elif part == "</bd>": is_bold = False
-            elif part == "<ins>": is_underline = True
-            elif part == "</ins>": is_underline = False
-            else:
-                # Handle multi-line text (like the address block)
-                for i, line_part in enumerate(part.split('\n')):
-                    if i > 0:
-                        paragraph.add_run().add_break()
-                    run = paragraph.add_run(line_part)
-                    run.bold = is_bold
-                    run.underline = is_underline
-                    run.font.name = 'Arial'
-                    run.font.size = Pt(11)
-    except Exception as e:
-        logger.error(f"Error in add_formatted_runs for text '{text_line}': {e}", exc_info=True)
-        raise
+    for part in parts:
+        if not part: continue
+        if part == "<bd>": is_bold = True
+        elif part == "</bd>": is_bold = False
+        elif part == "<ins>": is_underline = True
+        elif part == "</ins>": is_underline = False
+        else:
+            for i, line_part in enumerate(part.split('\n')):
+                if i > 0:
+                    paragraph.add_run().add_break()
+                run = paragraph.add_run(line_part)
+                run.bold = is_bold
+                run.underline = is_underline
+                run.font.name = 'Arial'
+                run.font.size = Pt(11)
 
 # --- Conditional Block Logic ---
 def should_render_track_block(tag, claim_assigned, selected_track):
@@ -125,60 +116,45 @@ def should_render_track_block(tag, claim_assigned, selected_track):
 
 # --- Document Generation Functions ---
 def generate_initial_advice_doc(app_inputs, placeholder_map):
-    try:
-        doc = Document()
-        doc.styles['Normal'].font.name = 'Arial'
-        doc.styles['Normal'].font.size = Pt(11)
-        p = doc.add_paragraph()
-        add_formatted_runs(p, "Initial Advice Summary - Matter Number: {matter_number}", placeholder_map)
-        p.paragraph_format.space_after = Pt(12)
-        table = doc.add_table(rows=3, cols=2)
-        table.style = 'Table Grid'
-        rows_data = [
-            ("Date of Advice", app_inputs['initial_advice_date'].strftime('%d/%m/%Y') if app_inputs.get('initial_advice_date') else ''),
-            ("Method of Advice", app_inputs.get('initial_advice_method', '')),
-            ("Advice Given", app_inputs.get('initial_advice_content', ''))
-        ]
-        for i, (label, value) in enumerate(rows_data):
-            table.rows[i].cells[0].text = label
-            table.rows[i].cells[1].text = value
-        doc_io = io.BytesIO()
-        doc.save(doc_io)
-        doc_io.seek(0)
-        return doc_io
-    except Exception as e:
-        logger.error(f"Failed to generate Initial Advice Summary: {e}", exc_info=True)
-        raise
+    doc = Document()
+    doc.styles['Normal'].font.name = 'Arial'
+    doc.styles['Normal'].font.size = Pt(11)
+    p = doc.add_paragraph()
+    add_formatted_runs(p, "Initial Advice Summary - Matter Number: {matter_number}", placeholder_map)
+    p.paragraph_format.space_after = Pt(12)
+    table = doc.add_table(rows=3, cols=2)
+    table.style = 'Table Grid'
+    rows_data = [
+        ("Date of Advice", app_inputs['initial_advice_date'].strftime('%d/%m/%Y') if app_inputs.get('initial_advice_date') else ''),
+        ("Method of Advice", app_inputs.get('initial_advice_method', '')),
+        ("Advice Given", app_inputs.get('initial_advice_content', ''))
+    ]
+    for i, (label, value) in enumerate(rows_data):
+        table.rows[i].cells[0].text = label
+        table.rows[i].cells[1].text = value
+    doc_io = io.BytesIO()
+    doc.save(doc_io)
+    doc_io.seek(0)
+    return doc_io
 
 def generate_fee_table(hourly_rate):
     roles = [("Partner", hourly_rate * 1.5), ("Senior Associate", hourly_rate), ("Associate", hourly_rate * 0.8), ("Trainee", hourly_rate * 0.5)]
-    # The template uses hardcoded numbers, so we generate the content to be inserted into a numbered list
     return [f"{role}: £{rate:,.2f} per hour (excl. VAT)" for role, rate in roles]
 
 def preprocess_precedent(precedent_content, app_inputs):
-    """
-    FIX: Major rewrite to parse markers directly from the user's `precedent.txt`.
-    Detects <ins> headings, numbered lists (1.), lettered lists (<a>), and roman lists (<i>).
-    """
     logical_elements = []
     lines = precedent_content.splitlines()
     i = 0
     current_block_tag = None
-
     while i < len(lines):
         line = lines[i]
         stripped_line = line.strip()
-
-        # Regex for block tags
         match_start_tag = re.match(r'\[(indiv|corp|a[1-4]|u[1-4])\]', stripped_line)
         match_end_tag = re.match(r'\[/(indiv|corp|a[1-4]|u[1-4])\]', stripped_line)
-
-        # Regex for content types from precedent.txt
         match_heading = re.match(r'^<ins>(.*)</ins>$', stripped_line)
         match_numbered_list = re.match(r'^(\d+)\.\s*(.*)', stripped_line)
         match_letter_list = re.match(r'^<a>\s*(.*)', stripped_line)
         match_roman_list = re.match(r'^<i>\s*(.*)', stripped_line)
-
         element = None
         if match_start_tag:
             current_block_tag = match_start_tag.group(1)
@@ -194,17 +170,13 @@ def preprocess_precedent(precedent_content, app_inputs):
             element = {'type': 'letter_list_item', 'content_lines': [match_letter_list.group(1)]}
         elif match_roman_list:
             element = {'type': 'roman_list_item', 'content_lines': [match_roman_list.group(1)]}
-        # A blank line in the file is a paragraph break with default spacing
         elif not stripped_line:
             element = {'type': 'blank_line', 'content_lines': []}
-        # Anything else is a general paragraph
         else:
-            element = {'type': 'general_paragraph', 'content_lines': [line]} # Keep original line for placeholder replacement
-
+            element = {'type': 'general_paragraph', 'content_lines': [line]}
         if element:
             element['block_tag'] = current_block_tag
             logical_elements.append(element)
-
         i += 1
     return logical_elements
 
@@ -214,30 +186,64 @@ def process_precedent_text(precedent_content, app_inputs, placeholder_map):
         doc.styles['Normal'].font.name = 'Arial'
         doc.styles['Normal'].font.size = Pt(11)
 
-        # Create one multi-level list definition to handle all list types
-        numbering = doc.part.numbering_part
-        abstract_num = numbering.new_abstract_num()
-        # Level 0: Numbered (1.)
-        lvl0 = abstract_num.add_level(level=0, num_format='decimal', start=1)
-        lvl0.text_format = '%1.'
-        lvl0.paragraph_format.left_indent = Cm(MAIN_LIST_TEXT_START_CM)
-        lvl0.paragraph_format.first_line_indent = -Cm(MARKER_OFFSET_CM)
-        # Level 1: Lettered (a) - Note: template uses <a>, but Word will render as (a) or a.
-        lvl1 = abstract_num.add_level(level=1, num_format='lowerLetter', start=1)
-        lvl1.text_format = '%2.'
-        lvl1.paragraph_format.left_indent = Cm(SUB_LIST_TEXT_START_CM)
-        lvl1.paragraph_format.first_line_indent = -Cm(MARKER_OFFSET_CM)
-        # Level 2: Roman (i)
-        lvl2 = abstract_num.add_level(level=2, num_format='lowerRoman', start=1)
-        lvl2.text_format = '%3.'
-        lvl2.paragraph_format.left_indent = Cm(SUB_ROMAN_TEXT_START_CM)
-        lvl2.paragraph_format.first_line_indent = -Cm(MARKER_OFFSET_CM)
-        # Link to a concrete instance
-        num_id = numbering.add_num(abstract_num)
+        # FIX: The following block correctly creates the list definitions using low-level OXML.
+        # This replaces the incorrect `new_abstract_num()` call.
+        numbering_elm = doc.part.numbering_part.element
+        abstract_num_id = 10  # An arbitrary ID for our list definition
+        num_instance_id = 1   # An arbitrary ID for the instance of the list
+
+        # Create <w:abstractNum>
+        abstract_num = OxmlElement('w:abstractNum')
+        abstract_num.set(qn('w:abstractNumId'), str(abstract_num_id))
+
+        # Define Level 0 (e.g., "1.")
+        lvl0 = OxmlElement('w:lvl')
+        lvl0.set(qn('w:ilvl'), '0')
+        lvl0.append(OxmlElement('w:numFmt', val='decimal'))
+        lvl0.append(OxmlElement('w:lvlText', val='%1.'))
+        pPr0 = OxmlElement('w:pPr')
+        ind0 = OxmlElement('w:ind', left=str(Cm(MAIN_LIST_TEXT_START_CM).twips), hanging=str(Cm(MARKER_OFFSET_CM).twips))
+        pPr0.append(ind0)
+        lvl0.append(pPr0)
+        abstract_num.append(lvl0)
+
+        # Define Level 1 (e.g., "a.")
+        lvl1 = OxmlElement('w:lvl')
+        lvl1.set(qn('w:ilvl'), '1')
+        lvl1.append(OxmlElement('w:numFmt', val='lowerLetter'))
+        lvl1.append(OxmlElement('w:lvlText', val='%2.'))
+        pPr1 = OxmlElement('w:pPr')
+        ind1 = OxmlElement('w:ind', left=str(Cm(SUB_LIST_TEXT_START_CM).twips), hanging=str(Cm(MARKER_OFFSET_CM).twips))
+        pPr1.append(ind1)
+        lvl1.append(pPr1)
+        abstract_num.append(lvl1)
+
+        # Define Level 2 (e.g., "i.")
+        lvl2 = OxmlElement('w:lvl')
+        lvl2.set(qn('w:ilvl'), '2')
+        lvl2.append(OxmlElement('w:numFmt', val='lowerRoman'))
+        lvl2.append(OxmlElement('w:lvlText', val='%3.'))
+        pPr2 = OxmlElement('w:pPr')
+        ind2 = OxmlElement('w:ind', left=str(Cm(SUB_ROMAN_TEXT_START_CM).twips), hanging=str(Cm(MARKER_OFFSET_CM).twips))
+        pPr2.append(ind2)
+        lvl2.append(pPr2)
+        abstract_num.append(lvl2)
+
+        numbering_elm.append(abstract_num)
+
+        # Create <w:num> to link the instance to the definition
+        num = OxmlElement('w:num')
+        num.set(qn('w:numId'), str(num_instance_id))
+        abstract_num_id_ref = OxmlElement('w:abstractNumId')
+        abstract_num_id_ref.set(qn('w:val'), str(abstract_num_id))
+        num.append(abstract_num_id_ref)
+        numbering_elm.append(num)
+        # End of list definition fix
 
         logical_elements = preprocess_precedent(precedent_content, app_inputs)
 
         for element in logical_elements:
+            # Conditional rendering logic...
             render_this_element = True
             tag = element.get('block_tag')
             if tag:
@@ -246,17 +252,20 @@ def process_precedent_text(precedent_content, app_inputs, placeholder_map):
                                          (tag == 'corp' and app_inputs['client_type'] == 'Corporate')
                 else:
                     render_this_element = should_render_track_block(tag, app_inputs['claim_assigned'], app_inputs['selected_track'])
-
             if not render_this_element: continue
 
             content = element['content_lines'][0] if element['content_lines'] else ""
 
-            def add_list_item(level, text, p_num_id):
-                p = doc.add_paragraph(text, style='List Paragraph')
-                p.paragraph_format.left_indent = None
-                p.paragraph_format.first_line_indent = None
-                p.numbering_style = f"num_lvl_{p_num_id.numId}_{level}"
-                # The numbering style applies indents. Re-apply formatting after.
+            # FIX: This helper function now correctly applies the list properties using OXML
+            def add_list_item(level, text):
+                p = doc.add_paragraph() # Add a plain paragraph first
+                pPr = p._p.get_or_add_pPr()
+                numPr = pPr.get_or_add_numPr()
+                numPr.get_or_add_ilvl().val = str(level)
+                numPr.get_or_add_numId().val = str(num_instance_id) # Use the instance ID
+                
+                # Add the text content and format after setting numbering
+                add_formatted_runs(p, text, placeholder_map)
                 p.paragraph_format.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
                 p.paragraph_format.space_after = Pt(6)
 
@@ -264,39 +273,32 @@ def process_precedent_text(precedent_content, app_inputs, placeholder_map):
                 doc.add_paragraph()
             elif element['type'] == 'fee_table':
                 for fee_line in element['content_lines']:
-                    add_list_item(0, fee_line, num_id)
+                    add_list_item(level=0, text=fee_line)
             elif element['type'] == 'heading':
                 p = doc.add_paragraph()
-                run = p.add_run(content)
-                run.underline = True
-                run.bold = True
-                run.font.name = 'Arial'
-                run.font.size = Pt(11)
+                add_formatted_runs(p, f"<ins>{content}</ins>", placeholder_map)
                 p.paragraph_format.space_before = Pt(12)
                 p.paragraph_format.space_after = Pt(6)
             elif element['type'] == 'numbered_list_item':
-                add_list_item(0, content, num_id)
+                add_list_item(level=0, text=content)
             elif element['type'] == 'letter_list_item':
-                add_list_item(1, content, num_id)
+                add_list_item(level=1, text=content)
             elif element['type'] == 'roman_list_item':
-                add_list_item(2, content, num_id)
+                add_list_item(level=2, text=content)
             elif element['type'] == 'general_paragraph':
                 p = doc.add_paragraph()
-                pf = p.paragraph_format
-                pf.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
-                # The [ind] tag is for line-level indentation, not a block
                 cleaned_content = content.replace('[ind]', '').strip()
                 if '[ind]' in content:
-                    pf.left_indent = Cm(INDENT_FOR_IND_TAG_CM)
+                    p.paragraph_format.left_indent = Cm(INDENT_FOR_IND_TAG_CM)
                 add_formatted_runs(p, cleaned_content, placeholder_map)
-                pf.space_after = Pt(12)
-
+                p.paragraph_format.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
+                p.paragraph_format.space_after = Pt(12)
         return doc
     except Exception as e:
         logger.error(f"Error processing precedent text: {e}", exc_info=True)
         raise
 
-# --- Streamlit App UI (largely unchanged, a few input labels updated for clarity) ---
+# --- Streamlit App UI (No changes needed here) ---
 st.set_page_config(layout="wide", page_title="Ramsdens Client Care Letter Generator")
 st.title("Ramsdens Client Care Letter Generator")
 
@@ -306,7 +308,6 @@ precedent_content = load_precedent_text()
 if not precedent_content: st.stop()
 
 with st.form("input_form"):
-    # ... Form definition ...
     st.header("1. Letter & Client Details")
     col1, col2 = st.columns(2)
     with col1:
@@ -357,26 +358,17 @@ if submitted:
         costs_text = f"a fixed fee of £{fixed_cost:,.2f} plus VAT (currently at 20%)"
 
     app_inputs = {
-        'qu1_dispute_nature': sanitize_input(qu1_dispute_nature),
-        'qu2_initial_steps': sanitize_input(qu2_initial_steps),
-        'qu3_timescales': sanitize_input(qu3_timescales),
-        'qu4_initial_costs_estimate': costs_text,
-        'fee_table': generate_fee_table(hourly_rate),
-        'client_type': client_type,
-        'claim_assigned': claim_assigned_input == "Yes",
-        'selected_track': selected_track,
-        'our_ref': sanitize_input(our_ref),
-        'your_ref': sanitize_input(your_ref),
-        'letter_date': letter_date.strftime('%d %B %Y'),
-        'client_name_input': sanitize_input(client_name_input),
+        'qu1_dispute_nature': sanitize_input(qu1_dispute_nature), 'qu2_initial_steps': sanitize_input(qu2_initial_steps),
+        'qu3_timescales': sanitize_input(qu3_timescales), 'qu4_initial_costs_estimate': costs_text,
+        'fee_table': generate_fee_table(hourly_rate), 'client_type': client_type,
+        'claim_assigned': claim_assigned_input == "Yes", 'selected_track': selected_track,
+        'our_ref': sanitize_input(our_ref), 'your_ref': sanitize_input(your_ref),
+        'letter_date': letter_date.strftime('%d %B %Y'), 'client_name_input': sanitize_input(client_name_input),
         'client_address_line1': sanitize_input(client_address_line1),
         'client_address_line2_conditional': sanitize_input(client_address_line2) if client_address_line2 else "",
-        'client_postcode': sanitize_input(client_postcode),
-        'name': sanitize_input(firm_details["person_responsible_name"]),
-        'initial_advice_content': initial_advice_content,
-        'initial_advice_method': initial_advice_method,
-        'initial_advice_date': initial_advice_date,
-        'firm_details': firm_details
+        'client_postcode': sanitize_input(client_postcode), 'name': sanitize_input(firm_details["person_responsible_name"]),
+        'initial_advice_content': initial_advice_content, 'initial_advice_method': initial_advice_method,
+        'initial_advice_date': initial_advice_date, 'firm_details': firm_details
     }
 
     placeholder_map = get_placeholder_map(app_inputs, firm_details)
