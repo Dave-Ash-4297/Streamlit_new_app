@@ -23,9 +23,7 @@ SUB_ROMAN_TEXT_START_CM = 2.1
 
 def sanitize_input(text):
     if not isinstance(text, str): text = str(text)
-    # Replace newlines from text areas with spaces to ensure they flow as a single paragraph in the final doc
-    text_with_spaces = text.replace('\n', ' ').replace('\r', '')
-    return html.escape(text_with_spaces)
+    return html.escape(text).replace('\n', ' ').replace('\r', '')
 
 @st.cache_data
 def load_firm_details():
@@ -75,19 +73,19 @@ def add_formatted_runs(paragraph, text_line, placeholder_map):
     processed_text = text_line
     for placeholder, value in placeholder_map.items():
         processed_text = processed_text.replace(f"{{{placeholder}}}", str(value))
-    parts = re.split(r'(<bd>|</bd>|<ins>|</ins>)', processed_text)
-    is_bold = is_underline = False
+    
+    # FIX: Regex now matches <bd> tags for bolding.
+    parts = re.split(r'(<bd>|</bd>)', processed_text)
+    is_bold = False
     for part in parts:
         if not part: continue
         if part == "<bd>": is_bold = True
         elif part == "</bd>": is_bold = False
-        elif part == "<ins>": is_underline = True
-        elif part == "</ins>": is_underline = False
         else:
             for i, line_part in enumerate(part.split('\n')):
                 if i > 0: paragraph.add_run().add_break()
                 run = paragraph.add_run(line_part)
-                run.bold, run.underline = is_bold, is_underline
+                run.bold = is_bold
                 run.font.name, run.font.size = 'Arial', Pt(11)
 
 def should_render_track_block(tag, claim_assigned, selected_track):
@@ -117,12 +115,18 @@ def generate_fee_table(hourly_rate):
     return [f"{role}: £{rate:,.2f} per hour (excl. VAT)" for role, rate in roles]
 
 def preprocess_precedent(precedent_content, app_inputs):
+    # FIX: Rewritten to parse the markers from the actual precedent.txt
     logical_elements, lines, i, current_block_tag = [], precedent_content.splitlines(), 0, None
     while i < len(lines):
         line, stripped_line = lines[i], lines[i].strip()
-        match_start_tag, match_end_tag = re.match(r'\[(indiv|corp|a[1-4]|u[1-4])\]', stripped_line), re.match(r'\[/(indiv|corp|a[1-4]|u[1-4])\]', stripped_line)
-        match_heading, match_numbered_list = re.match(r'^<ins>(.*)</ins>$', stripped_line), re.match(r'^(\d+)\.\s*(.*)', stripped_line)
-        match_letter_list, match_roman_list = re.match(r'^<a>\s*(.*)', stripped_line), re.match(r'^<i>\s*(.*)', stripped_line)
+        
+        match_start_tag = re.match(r'\[(indiv|corp|a[1-4]|u[1-4])\]', stripped_line)
+        match_end_tag = re.match(r'\[/(indiv|corp|a[1-4]|u[1-4])\]', stripped_line)
+        match_heading = re.match(r'^<ins>(.*)</ins>$', stripped_line)
+        match_numbered_list = re.match(r'^(\d+)\.\s*(.*)', stripped_line)
+        match_letter_list = re.match(r'^<a>\s*(.*)', stripped_line)
+        match_roman_list = re.match(r'^<i>\s*(.*)', stripped_line)
+
         element = None
         if match_start_tag: current_block_tag = match_start_tag.group(1)
         elif match_end_tag: current_block_tag = None
@@ -133,6 +137,7 @@ def preprocess_precedent(precedent_content, app_inputs):
         elif match_roman_list: element = {'type': 'roman_list_item', 'content_lines': [match_roman_list.group(1)]}
         elif not stripped_line: element = {'type': 'blank_line', 'content_lines': []}
         else: element = {'type': 'general_paragraph', 'content_lines': [line]}
+
         if element:
             element['block_tag'] = current_block_tag
             logical_elements.append(element)
@@ -193,22 +198,20 @@ def process_precedent_text(precedent_content, app_inputs, placeholder_map):
                 p = doc.add_paragraph()
                 pPr = p._p.get_or_add_pPr()
                 numPr = pPr.get_or_add_numPr()
-                numPr.get_or_add_ilvl().val = level
-                numPr.get_or_add_numId().val = num_instance_id
+                numPr.get_or_add_ilvl().val, numPr.get_or_add_numId().val = level, num_instance_id
                 add_formatted_runs(p, text, placeholder_map)
                 p.paragraph_format.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
                 p.paragraph_format.space_after = Pt(6)
 
-            # This is the fix: Ignore blank lines from the source text
-            if element['type'] == 'blank_line':
-                continue
+            if element['type'] == 'blank_line': continue
             elif element['type'] == 'fee_table':
                 for fee_line in element['content_lines']: add_list_item(0, fee_line)
             elif element['type'] == 'heading':
                 p = doc.add_paragraph()
-                add_formatted_runs(p, f"<ins>{content}</ins>", placeholder_map)
-                p.paragraph_format.space_before = Pt(12)
-                p.paragraph_format.space_after = Pt(6)
+                run = p.add_run(content)
+                run.underline = True
+                run.font.name, run.font.size = 'Arial', Pt(11)
+                p.paragraph_format.space_before, p.paragraph_format.space_after = Pt(12), Pt(6)
             elif element['type'] == 'numbered_list_item': add_list_item(0, content)
             elif element['type'] == 'letter_list_item': add_list_item(1, content)
             elif element['type'] == 'roman_list_item': add_list_item(2, content)
@@ -286,7 +289,7 @@ if submitted:
         'client_address_line1': sanitize_input(client_address_line1),
         'client_address_line2_conditional': sanitize_input(client_address_line2) if client_address_line2 else "",
         'client_postcode': sanitize_input(client_postcode), 'name': sanitize_input(firm_details["person_responsible_name"]),
-        'initial_advice_content': initial_advice_content, # Don't sanitize newlines for the advice summary table
+        'initial_advice_content': initial_advice_content, 
         'initial_advice_method': initial_advice_method,
         'initial_advice_date': initial_advice_date, 'firm_details': firm_details
     }
