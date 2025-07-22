@@ -22,12 +22,13 @@ SUB_LIST_TEXT_START_CM = 1.4
 SUB_ROMAN_TEXT_START_CM = 2.1
 
 def sanitize_input(text):
+    # This version is CORRECT because it does NOT replace newlines with spaces.
+    # It preserves the user's formatting from text areas.
     if not isinstance(text, str): text = str(text)
-    return html.escape(text).replace('\n', ' ').replace('\r', '')
+    return html.escape(text)
 
 @st.cache_data
 def load_firm_details():
-    # This is correct and unchanged
     return {
         "name": "Ramsdens Solicitors LLP", "short_name": "Ramsdens",
         "person_responsible_name": "Paul Pinder", "person_responsible_title": "Senior Associate",
@@ -71,22 +72,23 @@ def get_placeholder_map(app_inputs, firm_details):
     return placeholders
 
 def add_formatted_runs(paragraph, text_line, placeholder_map):
+    # This version is CORRECT. It handles placeholders, bold (<bd>), and underline (<ins>) as inline styles.
     processed_text = text_line
     for placeholder, value in placeholder_map.items():
         processed_text = processed_text.replace(f"{{{placeholder}}}", str(value))
-    
-    # FIX: Regex now correctly splits by the <bd> tag from your precedent file.
-    parts = re.split(r'(<bd>|</bd>)', processed_text)
-    is_bold = False
+    parts = re.split(r'(<bd>|</bd>|<ins>|</ins>)', processed_text)
+    is_bold = is_underline = False
     for part in parts:
         if not part: continue
         if part == "<bd>": is_bold = True
         elif part == "</bd>": is_bold = False
+        elif part == "<ins>": is_underline = True
+        elif part == "</ins>": is_underline = False
         else:
             for i, line_part in enumerate(part.split('\n')):
                 if i > 0: paragraph.add_run().add_break()
                 run = paragraph.add_run(line_part)
-                run.bold = is_bold
+                run.bold, run.underline = is_bold, is_underline
                 run.font.name, run.font.size = 'Arial', Pt(11)
 
 def should_render_track_block(tag, claim_assigned, selected_track):
@@ -99,7 +101,6 @@ def generate_initial_advice_doc(app_inputs, placeholder_map):
     doc = Document()
     doc.styles['Normal'].font.name, doc.styles['Normal'].font.size = 'Arial', Pt(11)
     p = doc.add_paragraph()
-    # Note: Using add_formatted_runs here just to handle placeholders, no bolding expected.
     add_formatted_runs(p, "Initial Advice Summary - Matter Number: {matter_number}", placeholder_map)
     p.paragraph_format.space_after = Pt(12)
     table = doc.add_table(rows=3, cols=2)
@@ -117,18 +118,12 @@ def generate_fee_table(hourly_rate):
     return [f"{role}: £{rate:,.2f} per hour (excl. VAT)" for role, rate in roles]
 
 def preprocess_precedent(precedent_content, app_inputs):
-    # FIX: This function now correctly parses the markers from your actual precedent.txt
     logical_elements, lines, i, current_block_tag = [], precedent_content.splitlines(), 0, None
     while i < len(lines):
         line, stripped_line = lines[i], lines[i].strip()
-        
-        match_start_tag = re.match(r'\[(indiv|corp|a[1-4]|u[1-4])\]', stripped_line)
-        match_end_tag = re.match(r'\[/(indiv|corp|a[1-4]|u[1-4])\]', stripped_line)
-        match_heading = re.match(r'^<ins>(.*)</ins>$', stripped_line)
-        match_numbered_list = re.match(r'^(\d+)\.\s*(.*)', stripped_line)
-        match_letter_list = re.match(r'^<a>\s*(.*)', stripped_line)
-        match_roman_list = re.match(r'^<i>\s*(.*)', stripped_line)
-
+        match_start_tag, match_end_tag = re.match(r'\[(indiv|corp|a[1-4]|u[1-4])\]', stripped_line), re.match(r'\[/(indiv|corp|a[1-4]|u[1-4])\]', stripped_line)
+        match_heading, match_numbered_list = re.match(r'^<ins>(.*)</ins>$', stripped_line), re.match(r'^(\d+)\.\s*(.*)', stripped_line)
+        match_letter_list, match_roman_list = re.match(r'^<a>\s*(.*)', stripped_line), re.match(r'^<i>\s*(.*)', stripped_line)
         element = None
         if match_start_tag: current_block_tag = match_start_tag.group(1)
         elif match_end_tag: current_block_tag = None
@@ -139,7 +134,6 @@ def preprocess_precedent(precedent_content, app_inputs):
         elif match_roman_list: element = {'type': 'roman_list_item', 'content_lines': [match_roman_list.group(1)]}
         elif not stripped_line: element = {'type': 'blank_line', 'content_lines': []}
         else: element = {'type': 'general_paragraph', 'content_lines': [line]}
-
         if element:
             element['block_tag'] = current_block_tag
             logical_elements.append(element)
@@ -198,11 +192,9 @@ def process_precedent_text(precedent_content, app_inputs, placeholder_map):
             elif element['type'] == 'fee_table':
                 for fee_line in element['content_lines']: add_list_item(0, fee_line)
             elif element['type'] == 'heading':
-                # FIX: This now correctly renders an underlined heading, it does not add tags back.
                 p = doc.add_paragraph()
-                run = p.add_run(content)
-                run.underline = True
-                run.font.name, run.font.size = 'Arial', Pt(11)
+                # This is the CORRECT way to render a heading, reusing the main formatting function.
+                add_formatted_runs(p, f"<ins>{content}</ins>", placeholder_map)
                 p.paragraph_format.space_before, p.paragraph_format.space_after = Pt(12), Pt(6)
             elif element['type'] == 'numbered_list_item': add_list_item(0, content)
             elif element['type'] == 'letter_list_item': add_list_item(1, content)
@@ -241,7 +233,6 @@ with st.form("input_form"):
         client_type = st.radio("Client Type", ("Individual", "Corporate"), horizontal=True)
 
     st.header("2. Initial Advice & Case Details")
-    # ... (rest of the form is unchanged as it was correct)
     c1, c2 = st.columns(2)
     with c1:
         st.subheader("Initial Advice Summary")
@@ -261,7 +252,8 @@ with st.form("input_form"):
     hourly_rate = st.number_input("Your Hourly Rate (£)", 295)
     cost_type_is_range = st.toggle("Use a cost range", True)
     if cost_type_is_range:
-        lower_cost, upper_cost = st.number_input("Lower £", float(hourly_rate * 2)), st.number_input("Upper £", float(hourly_rate * 3))
+        lower_cost = st.number_input("Lower £", float(hourly_rate * 2))
+        upper_cost = st.number_input("Upper £", float(hourly_rate * 3))
     else:
         fixed_cost = st.number_input("Fixed cost £", float(hourly_rate * 2.5))
 
@@ -280,7 +272,7 @@ if submitted:
         'client_address_line1': sanitize_input(client_address_line1),
         'client_address_line2_conditional': sanitize_input(client_address_line2) if client_address_line2 else "",
         'client_postcode': sanitize_input(client_postcode), 'name': sanitize_input(firm_details["person_responsible_name"]),
-        'initial_advice_content': initial_advice_content, 
+        'initial_advice_content': initial_advice_content, # Do not sanitize newlines for the table
         'initial_advice_method': initial_advice_method,
         'initial_advice_date': initial_advice_date, 'firm_details': firm_details
     }
