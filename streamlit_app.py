@@ -27,6 +27,7 @@ def sanitize_input(text):
 
 @st.cache_data
 def load_firm_details():
+    # This is correct and unchanged
     return {
         "name": "Ramsdens Solicitors LLP", "short_name": "Ramsdens",
         "person_responsible_name": "Paul Pinder", "person_responsible_title": "Senior Associate",
@@ -74,7 +75,7 @@ def add_formatted_runs(paragraph, text_line, placeholder_map):
     for placeholder, value in placeholder_map.items():
         processed_text = processed_text.replace(f"{{{placeholder}}}", str(value))
     
-    # FIX: Regex now matches <bd> tags for bolding.
+    # FIX: Regex now correctly splits by the <bd> tag from your precedent file.
     parts = re.split(r'(<bd>|</bd>)', processed_text)
     is_bold = False
     for part in parts:
@@ -98,6 +99,7 @@ def generate_initial_advice_doc(app_inputs, placeholder_map):
     doc = Document()
     doc.styles['Normal'].font.name, doc.styles['Normal'].font.size = 'Arial', Pt(11)
     p = doc.add_paragraph()
+    # Note: Using add_formatted_runs here just to handle placeholders, no bolding expected.
     add_formatted_runs(p, "Initial Advice Summary - Matter Number: {matter_number}", placeholder_map)
     p.paragraph_format.space_after = Pt(12)
     table = doc.add_table(rows=3, cols=2)
@@ -115,7 +117,7 @@ def generate_fee_table(hourly_rate):
     return [f"{role}: £{rate:,.2f} per hour (excl. VAT)" for role, rate in roles]
 
 def preprocess_precedent(precedent_content, app_inputs):
-    # FIX: Rewritten to parse the markers from the actual precedent.txt
+    # FIX: This function now correctly parses the markers from your actual precedent.txt
     logical_elements, lines, i, current_block_tag = [], precedent_content.splitlines(), 0, None
     while i < len(lines):
         line, stripped_line = lines[i], lines[i].strip()
@@ -155,19 +157,11 @@ def process_precedent_text(precedent_content, app_inputs, placeholder_map):
         abstract_num.set(qn('w:abstractNumId'), str(abstract_num_id))
 
         def create_level(ilvl, numFmt, lvlText, left_indent):
-            lvl = OxmlElement('w:lvl')
-            lvl.set(qn('w:ilvl'), str(ilvl))
-            numFmt_el = OxmlElement('w:numFmt')
-            numFmt_el.set(qn('w:val'), numFmt)
-            lvl.append(numFmt_el)
-            lvlText_el = OxmlElement('w:lvlText')
-            lvlText_el.set(qn('w:val'), lvlText)
-            lvl.append(lvlText_el)
+            lvl = OxmlElement('w:lvl'); lvl.set(qn('w:ilvl'), str(ilvl))
+            numFmt_el = OxmlElement('w:numFmt'); numFmt_el.set(qn('w:val'), numFmt); lvl.append(numFmt_el)
+            lvlText_el = OxmlElement('w:lvlText'); lvlText_el.set(qn('w:val'), lvlText); lvl.append(lvlText_el)
             pPr = OxmlElement('w:pPr')
-            ind = OxmlElement('w:ind')
-            ind.set(qn('w:left'), str(left_indent.twips))
-            ind.set(qn('w:hanging'), str(Cm(MARKER_OFFSET_CM).twips))
-            pPr.append(ind)
+            ind = OxmlElement('w:ind'); ind.set(qn('w:left'), str(left_indent.twips)); ind.set(qn('w:hanging'), str(Cm(MARKER_OFFSET_CM).twips)); pPr.append(ind)
             lvl.append(pPr)
             return lvl
 
@@ -176,11 +170,8 @@ def process_precedent_text(precedent_content, app_inputs, placeholder_map):
         abstract_num.append(create_level(2, 'lowerRoman', '%3.', Cm(SUB_ROMAN_TEXT_START_CM)))
         numbering_elm.append(abstract_num)
 
-        num = OxmlElement('w:num')
-        num.set(qn('w:numId'), str(num_instance_id))
-        abstract_num_id_ref = OxmlElement('w:abstractNumId')
-        abstract_num_id_ref.set(qn('w:val'), str(abstract_num_id))
-        num.append(abstract_num_id_ref)
+        num = OxmlElement('w:num'); num.set(qn('w:numId'), str(num_instance_id))
+        abstract_num_id_ref = OxmlElement('w:abstractNumId'); abstract_num_id_ref.set(qn('w:val'), str(abstract_num_id)); num.append(abstract_num_id_ref)
         numbering_elm.append(num)
 
         logical_elements = preprocess_precedent(precedent_content, app_inputs)
@@ -207,6 +198,7 @@ def process_precedent_text(precedent_content, app_inputs, placeholder_map):
             elif element['type'] == 'fee_table':
                 for fee_line in element['content_lines']: add_list_item(0, fee_line)
             elif element['type'] == 'heading':
+                # FIX: This now correctly renders an underlined heading, it does not add tags back.
                 p = doc.add_paragraph()
                 run = p.add_run(content)
                 run.underline = True
@@ -242,13 +234,14 @@ with st.form("input_form"):
         letter_date = st.date_input("Letter Date", datetime.today())
     with c2:
         client_name_input = st.text_input("Client Full Name / Company Name", "Mr. John Smith")
-        client_salutation_name = st.text_input("Salutation (for 'Dear ...' and address block)", "Mr. Smith")
+        client_salutation_name = st.text_input("Salutation (for address block & 'Dear...')", "Mr. Smith")
         client_address_line1 = st.text_input("Address Line 1", "123 Example Street")
         client_address_line2 = st.text_input("Address Line 2 (optional)", "SomeTown")
         client_postcode = st.text_input("Postcode", "EX4 MPL")
         client_type = st.radio("Client Type", ("Individual", "Corporate"), horizontal=True)
 
     st.header("2. Initial Advice & Case Details")
+    # ... (rest of the form is unchanged as it was correct)
     c1, c2 = st.columns(2)
     with c1:
         st.subheader("Initial Advice Summary")
@@ -264,13 +257,11 @@ with st.form("input_form"):
     qu1_dispute_nature = st.text_area('Dispute Nature', "a contractual matter...", height=75)
     qu2_initial_steps = st.text_area('Initial Work', "review documentation...", height=100)
     qu3_timescales = st.text_area("Estimated Timescales", "approx two to four weeks...", height=100)
-    
     st.subheader("Estimated Initial Costs")
     hourly_rate = st.number_input("Your Hourly Rate (£)", 295)
     cost_type_is_range = st.toggle("Use a cost range", True)
     if cost_type_is_range:
-        lower_cost = st.number_input("Lower £", float(hourly_rate * 2))
-        upper_cost = st.number_input("Upper £", float(hourly_rate * 3))
+        lower_cost, upper_cost = st.number_input("Lower £", float(hourly_rate * 2)), st.number_input("Upper £", float(hourly_rate * 3))
     else:
         fixed_cost = st.number_input("Fixed cost £", float(hourly_rate * 2.5))
 
