@@ -244,7 +244,7 @@ with st.form("input_form"):
         client_address_line1 = st.text_input("Address Line 1", "123 Example Street")
         client_address_line2 = st.text_input("Address Line 2 (optional)", "SomeTown")
         client_postcode = st.text_input("Postcode", "EX4 MPL")
-        client_type = st.radio("Client Type", ("Individual", "Corporate"), horizontal=False)
+        client_type = st.radio("Client Type", ("Individual", "Corporate"), horizontal=True)
 
     st.header("2. Initial Advice & Case Details")
     c1, c2 = st.columns(2)
