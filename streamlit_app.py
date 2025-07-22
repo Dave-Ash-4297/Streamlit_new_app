@@ -56,20 +56,14 @@ def load_precedent_text():
 
 def get_placeholder_map(app_inputs, firm_details):
     placeholders = {
-        'qu1_dispute_nature': app_inputs.get('qu1_dispute_nature', ''),
-        'qu2_initial_steps': app_inputs.get('qu2_initial_steps', ''),
-        'qu3_timescales': app_inputs.get('qu3_timescales', ''),
-        'qu4_initial_costs_estimate': app_inputs.get('qu4_initial_costs_estimate', 'XX,XXX'),
-        'fee_table': app_inputs.get('fee_table', ["Fee table not provided"]),
-        'our_ref': str(app_inputs.get('our_ref', '')),
-        'your_ref': str(app_inputs.get('your_ref', '')),
-        'letter_date': str(app_inputs.get('letter_date', '')),
-        'client_name_input': str(app_inputs.get('client_name_input', '')),
-        'client_salutation': str(app_inputs.get('client_salutation', '')),
+        'qu1_dispute_nature': app_inputs.get('qu1_dispute_nature', ''), 'qu2_initial_steps': app_inputs.get('qu2_initial_steps', ''),
+        'qu3_timescales': app_inputs.get('qu3_timescales', ''), 'qu4_initial_costs_estimate': app_inputs.get('qu4_initial_costs_estimate', 'XX,XXX'),
+        'fee_table': app_inputs.get('fee_table', ["Fee table not provided"]), 'our_ref': str(app_inputs.get('our_ref', '')),
+        'your_ref': str(app_inputs.get('your_ref', '')), 'letter_date': str(app_inputs.get('letter_date', '')),
+        'client_name_input': str(app_inputs.get('client_name_input', '')), 'client_salutation': str(app_inputs.get('client_salutation', '')),
         'client_address_line1': str(app_inputs.get('client_address_line1', '')),
         'client_address_line2_conditional': str(app_inputs.get('client_address_line2_conditional', '')),
-        'client_postcode': str(app_inputs.get('client_postcode', '')),
-        'matter_number': str(app_inputs.get('our_ref', '')),
+        'client_postcode': str(app_inputs.get('client_postcode', '')), 'matter_number': str(app_inputs.get('our_ref', '')),
         'name': str(app_inputs.get('name', '')),
     }
     firm_placeholders = {k: str(v) for k, v in firm_details.items()}
@@ -92,7 +86,8 @@ def add_formatted_runs(paragraph, text_line, placeholder_map):
             for i, line_part in enumerate(part.split('\n')):
                 if i > 0: paragraph.add_run().add_break()
                 run = paragraph.add_run(line_part)
-                run.bold, run.underline = is_bold, is_underline
+                run.bold = is_bold
+                run.underline = is_underline
                 run.font.name = 'Arial'
                 run.font.size = Pt(11)
 
@@ -123,46 +118,25 @@ def generate_fee_table(hourly_rate):
     return [f"{role}: £{rate:,.2f} per hour (excl. VAT)" for role, rate in roles]
 
 def preprocess_precedent(precedent_content, app_inputs):
-    logical_elements = []
-    lines = precedent_content.splitlines()
-    i = 0
-    current_block_tag = None
+    logical_elements, lines, i, current_block_tag = [], precedent_content.splitlines(), 0, None
     while i < len(lines):
-        line = lines[i]
-        stripped_line = line.strip()
-        
-        match_start_tag = re.match(r'\[(indiv|corp|a[1-4]|u[1-4])\]', stripped_line)
-        match_end_tag = re.match(r'\[/(indiv|corp|a[1-4]|u[1-4])\]', stripped_line)
-        match_heading = re.match(r'^<ins>(.*)</ins>$', stripped_line)
-        match_numbered_list = re.match(r'^(\d+)\.\s*(.*)', stripped_line)
-        match_letter_list = re.match(r'^<a>\s*(.*)', stripped_line)
-        match_roman_list = re.match(r'^<i>\s*(.*)', stripped_line)
-        
+        line, stripped_line = lines[i], lines[i].strip()
+        match_start_tag, match_end_tag = re.match(r'\[(indiv|corp|a[1-4]|u[1-4])\]', stripped_line), re.match(r'\[/(indiv|corp|a[1-4]|u[1-4])\]', stripped_line)
+        match_heading, match_numbered_list = re.match(r'^<ins>(.*)</ins>$', stripped_line), re.match(r'^(\d+)\.\s*(.*)', stripped_line)
+        match_letter_list, match_roman_list = re.match(r'^<a>\s*(.*)', stripped_line), re.match(r'^<i>\s*(.*)', stripped_line)
         element = None
-        if match_start_tag:
-            current_block_tag = match_start_tag.group(1)
-        elif match_end_tag:
-            current_block_tag = None
-        elif stripped_line == '[FEE_TABLE_PLACEHOLDER]':
-            element = {'type': 'fee_table', 'content_lines': app_inputs['fee_table']}
-        elif match_heading:
-            element = {'type': 'heading', 'content_lines': [match_heading.group(1)]}
-        elif match_numbered_list:
-            element = {'type': 'numbered_list_item', 'content_lines': [match_numbered_list.group(2)]}
-        elif match_letter_list:
-            element = {'type': 'letter_list_item', 'content_lines': [match_letter_list.group(1)]}
-        elif match_roman_list:
-            element = {'type': 'roman_list_item', 'content_lines': [match_roman_list.group(1)]}
-        elif not stripped_line:
-            element = {'type': 'blank_line', 'content_lines': []}
-        else:
-            element = {'type': 'general_paragraph', 'content_lines': [line]}
-            
+        if match_start_tag: current_block_tag = match_start_tag.group(1)
+        elif match_end_tag: current_block_tag = None
+        elif stripped_line == '[FEE_TABLE_PLACEHOLDER]': element = {'type': 'fee_table', 'content_lines': app_inputs['fee_table']}
+        elif match_heading: element = {'type': 'heading', 'content_lines': [match_heading.group(1)]}
+        elif match_numbered_list: element = {'type': 'numbered_list_item', 'content_lines': [match_numbered_list.group(2)]}
+        elif match_letter_list: element = {'type': 'letter_list_item', 'content_lines': [match_letter_list.group(1)]}
+        elif match_roman_list: element = {'type': 'roman_list_item', 'content_lines': [match_roman_list.group(1)]}
+        elif not stripped_line: element = {'type': 'blank_line', 'content_lines': []}
+        else: element = {'type': 'general_paragraph', 'content_lines': [line]}
         if element:
-            # FIX: This is the corrected, valid Python syntax.
             element['block_tag'] = current_block_tag
             logical_elements.append(element)
-            
         i += 1
     return logical_elements
 
@@ -222,7 +196,9 @@ def process_precedent_text(precedent_content, app_inputs, placeholder_map):
                 numPr = pPr.get_or_add_numPr()
                 numPr.get_or_add_ilvl().val, numPr.get_or_add_numId().val = str(level), str(num_instance_id)
                 add_formatted_runs(p, text, placeholder_map)
-                p.paragraph_format.alignment, p.paragraph_format.space_after = WD_PARAGRAPH_ALIGNMENT.JUSTIFY, Pt(6)
+                # FIX: Set paragraph properties on separate lines.
+                p.paragraph_format.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
+                p.paragraph_format.space_after = Pt(6)
 
             if element['type'] == 'blank_line': doc.add_paragraph()
             elif element['type'] == 'fee_table':
@@ -230,7 +206,9 @@ def process_precedent_text(precedent_content, app_inputs, placeholder_map):
             elif element['type'] == 'heading':
                 p = doc.add_paragraph()
                 add_formatted_runs(p, f"<ins>{content}</ins>", placeholder_map)
-                p.paragraph_format.space_before, p.paragraph_format.space_after = Pt(12), Pt(6)
+                # FIX: Set paragraph properties on separate lines.
+                p.paragraph_format.space_before = Pt(12)
+                p.paragraph_format.space_after = Pt(6)
             elif element['type'] == 'numbered_list_item': add_list_item(0, content)
             elif element['type'] == 'letter_list_item': add_list_item(1, content)
             elif element['type'] == 'roman_list_item': add_list_item(2, content)
@@ -239,7 +217,9 @@ def process_precedent_text(precedent_content, app_inputs, placeholder_map):
                 cleaned_content = content.replace('[ind]', '').strip()
                 if '[ind]' in content: p.paragraph_format.left_indent = Cm(INDENT_FOR_IND_TAG_CM)
                 add_formatted_runs(p, cleaned_content, placeholder_map)
-                p.paragraph_format.alignment, p.paragraph_format.space_after = WD_PARAGRAPH_ALIGNMENT.JUSTIFY, Pt(12)
+                # FIX: Set paragraph properties on separate lines.
+                p.paragraph_format.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
+                p.paragraph_format.space_after = Pt(12)
         return doc
     except Exception as e:
         logger.error(f"Error processing precedent text: {e}", exc_info=True)
@@ -264,7 +244,7 @@ with st.form("input_form"):
         client_address_line1 = st.text_input("Address Line 1", "123 Example Street")
         client_address_line2 = st.text_input("Address Line 2 (optional)", "SomeTown")
         client_postcode = st.text_input("Postcode", "EX4 MPL")
-        client_type = st.radio("Client Type", ("Individual", "Corporate"), horizontal=True)
+        client_type = st.radio("Client Type", ("Individual", "Corporate"), horizontal=False)
 
     st.header("2. Initial Advice & Case Details")
     c1, c2 = st.columns(2)
