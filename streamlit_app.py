@@ -23,7 +23,9 @@ SUB_ROMAN_TEXT_START_CM = 2.1
 
 def sanitize_input(text):
     if not isinstance(text, str): text = str(text)
-    return html.escape(text)
+    # Replace newlines from text areas with spaces to ensure they flow as a single paragraph in the final doc
+    text_with_spaces = text.replace('\n', ' ').replace('\r', '')
+    return html.escape(text_with_spaces)
 
 @st.cache_data
 def load_firm_details():
@@ -191,14 +193,15 @@ def process_precedent_text(precedent_content, app_inputs, placeholder_map):
                 p = doc.add_paragraph()
                 pPr = p._p.get_or_add_pPr()
                 numPr = pPr.get_or_add_numPr()
-                # These values MUST be integers, not strings. This was the final bug.
                 numPr.get_or_add_ilvl().val = level
                 numPr.get_or_add_numId().val = num_instance_id
                 add_formatted_runs(p, text, placeholder_map)
                 p.paragraph_format.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
                 p.paragraph_format.space_after = Pt(6)
 
-            if element['type'] == 'blank_line': continue #doc.add_paragraph()
+            # This is the fix: Ignore blank lines from the source text
+            if element['type'] == 'blank_line':
+                continue
             elif element['type'] == 'fee_table':
                 for fee_line in element['content_lines']: add_list_item(0, fee_line)
             elif element['type'] == 'heading':
@@ -283,7 +286,8 @@ if submitted:
         'client_address_line1': sanitize_input(client_address_line1),
         'client_address_line2_conditional': sanitize_input(client_address_line2) if client_address_line2 else "",
         'client_postcode': sanitize_input(client_postcode), 'name': sanitize_input(firm_details["person_responsible_name"]),
-        'initial_advice_content': initial_advice_content, 'initial_advice_method': initial_advice_method,
+        'initial_advice_content': initial_advice_content, # Don't sanitize newlines for the advice summary table
+        'initial_advice_method': initial_advice_method,
         'initial_advice_date': initial_advice_date, 'firm_details': firm_details
     }
     placeholder_map = get_placeholder_map(app_inputs, firm_details)
