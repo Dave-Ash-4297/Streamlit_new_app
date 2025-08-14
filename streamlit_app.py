@@ -11,22 +11,28 @@ import zipfile
 import logging
 import html
 
-# --- Setup Logging, Constants, and Utility Functions ---
+# --- Setup Logging ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+# --- Constants ---
 INDENT_FOR_IND_TAG_CM = 1.25
 MAIN_LIST_TEXT_START_CM = 0.7
 MARKER_OFFSET_CM = 0.7
 SUB_LIST_TEXT_START_CM = 1.4
 SUB_ROMAN_TEXT_START_CM = 2.1
 
+# --- Utility Functions ---
 def sanitize_input(text):
-    if not isinstance(text, str): text = str(text)
+    """Escapes HTML characters in user input to prevent issues."""
+    if not isinstance(text, str):
+        text = str(text)
     return html.escape(text)
 
+# --- Data Loading ---
 @st.cache_data
 def load_firm_details():
+    """Loads static firm details."""
     return {
         "name": "Ramsdens Solicitors LLP", "short_name": "Ramsdens",
         "person_responsible_name": "Paul Pinder", "person_responsible_title": "Senior Associate",
@@ -42,209 +48,198 @@ def load_firm_details():
 
 @st.cache_data
 def load_precedent_text():
+    """Loads the precedent text file."""
     try:
         with open("precedent.txt", "r", encoding="utf-8") as f:
-            content = f.read()
-            return content
+            return f.read()
     except FileNotFoundError:
         st.error("precedent.txt not found.")
         return ""
-    except Exception as e:
-        st.error(f"Error loading precedent.txt: {e}")
-        return ""
 
-def get_placeholder_map(app_inputs, firm_details):
-    placeholders = {
-        'qu1_dispute_nature': app_inputs.get('qu1_dispute_nature', ''), 'qu2_initial_steps': app_inputs.get('qu2_initial_steps', ''),
-        'qu3_timescales': app_inputs.get('qu3_timescales', ''), 'qu4_initial_costs_estimate': app_inputs.get('qu4_initial_costs_estimate', 'XX,XXX'),
-        'fee_table': app_inputs.get('fee_table', ["Fee table not provided"]), 'our_ref': str(app_inputs.get('our_ref', '')),
-        'your_ref': str(app_inputs.get('your_ref', '')), 'letter_date': str(app_inputs.get('letter_date', '')),
-        'client_name_input': str(app_inputs.get('client_name_input', '')), 'client_salutation': str(app_inputs.get('client_salutation', '')),
-        'client_address_line1': str(app_inputs.get('client_address_line1', '')),
-        'client_address_line2_conditional': str(app_inputs.get('client_address_line2_conditional', '')),
-        'client_postcode': str(app_inputs.get('client_postcode', '')), 'matter_number': str(app_inputs.get('our_ref', '')),
-        'name': str(app_inputs.get('name', '')),
-    }
-    firm_placeholders = {k: str(v) for k, v in firm_details.items()}
-    placeholders.update(firm_placeholders)
-    return placeholders
-
-def add_formatted_runs(paragraph, text_line, placeholder_map):
-    processed_text = text_line
-    for placeholder, value in placeholder_map.items():
-        processed_text = processed_text.replace(f"{{{placeholder}}}", str(value))
-    parts = re.split(r'(<bd>|</bd>|<ins>|</ins>)', processed_text)
-    is_bold = is_underline = False
-    for part in parts:
-        if not part: continue
-        if part == "<bd>": is_bold = True
-        elif part == "</bd>": is_bold = False
-        elif part == "<ins>": is_underline = True
-        elif part == "</ins>": is_underline = False
-        else:
-            for i, line_part in enumerate(part.split('\n')):
-                if i > 0: paragraph.add_run().add_break()
-                run = paragraph.add_run(line_part)
-                run.bold, run.underline = is_bold, is_underline
-                run.font.name, run.font.size = 'Arial', Pt(11)
-
-def should_render_track_block(tag, claim_assigned, selected_track):
-    tag_map = {'a1': (True, "Small Claims Track"), 'a2': (True, "Fast Track"), 'a3': (True, "Intermediate Track"), 'a4': (True, "Multi Track"), 'u1': (False, "Small Claims Track"), 'u2': (False, "Fast Track"), 'u3': (False, "Intermediate Track"), 'u4': (False, "Multi Track")}
-    expected = tag_map.get(tag)
-    if not expected: return False
-    return claim_assigned == expected[0] and selected_track == expected[1]
-
-def generate_initial_advice_doc(app_inputs, placeholder_map):
+# --- Document Generation Logic ---
+def generate_client_care_document(precedent_content, app_inputs):
+    """
+    Parses the precedent text and generates a .docx file in memory.
+    This function has been refactored for simplicity and reliability.
+    """
+    
+    # 1. SETUP THE DOCUMENT AND NUMBERING
     doc = Document()
-    doc.styles['Normal'].font.name, doc.styles['Normal'].font.size = 'Arial', Pt(11)
-    p = doc.add_paragraph()
-    add_formatted_runs(p, "Initial Advice Summary - Matter Number: {matter_number}", placeholder_map)
-    p.paragraph_format.space_after = Pt(12)
-    table = doc.add_table(rows=3, cols=2)
-    table.style = 'Table Grid'
-    rows_data = [("Date of Advice", app_inputs['initial_advice_date'].strftime('%d/%m/%Y') if app_inputs.get('initial_advice_date') else ''), ("Method of Advice", app_inputs.get('initial_advice_method', '')), ("Advice Given", app_inputs.get('initial_advice_content', ''))]
-    for i, (label, value) in enumerate(rows_data):
-        table.rows[i].cells[0].text, table.rows[i].cells[1].text = label, value
-    doc_io = io.BytesIO()
-    doc.save(doc_io)
-    doc_io.seek(0)
-    return doc_io
+    doc.styles['Normal'].font.name = 'Arial'
+    doc.styles['Normal'].font.size = Pt(11)
 
-def generate_fee_table(hourly_rate):
-    roles = [("Partner", hourly_rate * 1.5), ("Senior Associate", hourly_rate), ("Associate", hourly_rate * 0.8), ("Trainee", hourly_rate * 0.5)]
-    return [f"{role}: £{rate:,.2f} per hour (excl. VAT)" for role, rate in roles]
+    numbering_elm = doc.part.numbering_part.element
+    abstract_num_id, num_instance_id = 10, 1
 
-def preprocess_precedent(precedent_content, app_inputs):
-    logical_elements = []
-    lines = precedent_content.splitlines()
-    current_block_tag = None
-
-    for line in lines:
-        stripped_line = line.strip()
-        element = None
-
-        match_start_tag = re.match(r'\[(indiv|corp|a[1-4]|u[1-4])\]', stripped_line)
-        match_end_tag = re.match(r'\[/(indiv|corp|a[1-4]|u[1-4])\]', stripped_line)
-        match_heading = re.match(r'^<ins>(.*)</ins>$', stripped_line)
-        match_numbered_list = re.match(r'^(\d+)\.\s*(.*)', stripped_line)
-        match_letter_list = re.match(r'^<a>\s*(.*)', stripped_line)
-        match_roman_list = re.match(r'^<i>\s*(.*)', stripped_line)
-
-        if match_start_tag:
-            current_block_tag = match_start_tag.group(1)
-            continue  # This is a tag, not content, so skip to the next line
-        elif match_end_tag:
-            current_block_tag = None
-            continue  # This is a tag, not content, so skip to the next line
-        elif stripped_line == '[FEE_TABLE_PLACEHOLDER]':
-            element = {'type': 'fee_table', 'content_lines': app_inputs['fee_table']}
-        elif match_heading:
-            element = {'type': 'heading', 'content_lines': [match_heading.group(1)]}
-        elif match_numbered_list:
-            element = {'type': 'numbered_list_item', 'content_lines': [match_numbered_list.group(2)]}
-        elif match_letter_list:
-            element = {'type': 'letter_list_item', 'content_lines': [match_letter_list.group(1)]}
-        elif match_roman_list:
-            element = {'type': 'roman_list_item', 'content_lines': [match_roman_list.group(1)]}
-        elif not stripped_line:
-            element = {'type': 'blank_line', 'content_lines': []}
-        else:
-            element = {'type': 'general_paragraph', 'content_lines': [line]}
-
-        if element:
-            element['block_tag'] = current_block_tag
-            logical_elements.append(element)
-            
-    return logical_elements
-
-def process_precedent_text(precedent_content, app_inputs, placeholder_map):
-    try:
-        doc = Document()
-        doc.styles['Normal'].font.name, doc.styles['Normal'].font.size = 'Arial', Pt(11)
-        numbering_elm = doc.part.numbering_part.element
-        abstract_num_id, num_instance_id = 10, 1
-
+    def setup_numbering_style(numbering_element):
+        """Creates the multi-level list style for the document."""
         abstract_num = OxmlElement('w:abstractNum')
         abstract_num.set(qn('w:abstractNumId'), str(abstract_num_id))
 
-        def create_level(ilvl, numFmt, lvlText, left_indent):
+        def create_level(ilvl, numFmt, lvlText, left_cm):
             lvl = OxmlElement('w:lvl')
             lvl.set(qn('w:ilvl'), str(ilvl))
-            numFmt_el = OxmlElement('w:numFmt')
-            numFmt_el.set(qn('w:val'), numFmt)
-            lvl.append(numFmt_el)
-            lvlText_el = OxmlElement('w:lvlText')
-            lvlText_el.set(qn('w:val'), lvlText)
-            lvl.append(lvlText_el)
+            lvl.append(OxmlElement('w:start', {qn('w:val'): '1'}))
+            lvl.append(OxmlElement('w:numFmt', {qn('w:val'): numFmt}))
+            lvl.append(OxmlElement('w:lvlText', {qn('w:val'): lvlText}))
             pPr = OxmlElement('w:pPr')
             ind = OxmlElement('w:ind')
-            ind.set(qn('w:left'), str(left_indent.twips))
+            ind.set(qn('w:left'), str(Cm(left_cm).twips))
             ind.set(qn('w:hanging'), str(Cm(MARKER_OFFSET_CM).twips))
             pPr.append(ind)
             lvl.append(pPr)
             return lvl
 
-        abstract_num.append(create_level(0, 'decimal', '%1.', Cm(MAIN_LIST_TEXT_START_CM)))
-        abstract_num.append(create_level(1, 'lowerLetter', '%2.', Cm(SUB_LIST_TEXT_START_CM)))
-        abstract_num.append(create_level(2, 'lowerRoman', '%3.', Cm(SUB_ROMAN_TEXT_START_CM)))
-        numbering_elm.append(abstract_num)
+        abstract_num.append(create_level(0, 'decimal', '%1.', MAIN_LIST_TEXT_START_CM))
+        abstract_num.append(create_level(1, 'lowerLetter', '%2.', SUB_LIST_TEXT_START_CM))
+        abstract_num.append(create_level(2, 'lowerRoman', '%3.', SUB_ROMAN_TEXT_START_CM))
+        numbering_element.append(abstract_num)
 
         num = OxmlElement('w:num')
         num.set(qn('w:numId'), str(num_instance_id))
-        abstract_num_id_ref = OxmlElement('w:abstractNumId')
-        abstract_num_id_ref.set(qn('w:val'), str(abstract_num_id))
-        num.append(abstract_num_id_ref)
-        numbering_elm.append(num)
+        num.append(OxmlElement('w:abstractNumId', {qn('w:val'): str(abstract_num_id)}))
+        numbering_element.append(num)
 
-        logical_elements = preprocess_precedent(precedent_content, app_inputs)
-        for element in logical_elements:
-            render_this_element = True
-            tag = element.get('block_tag')
-            if tag:
-                if tag in ['indiv', 'corp']: render_this_element = (tag == 'indiv' and app_inputs['client_type'] == 'Individual') or (tag == 'corp' and app_inputs['client_type'] == 'Corporate')
-                else: render_this_element = should_render_track_block(tag, app_inputs['claim_assigned'], app_inputs['selected_track'])
-            if not render_this_element: continue
+    setup_numbering_style(numbering_elm)
 
-            content = element['content_lines'][0] if element['content_lines'] else ""
+    # 2. HELPER FUNCTIONS FOR ADDING CONTENT
+    def add_formatted_runs(paragraph, text_line):
+        """Adds text to a paragraph, handling bold and underline tags."""
+        processed_text = text_line
+        for placeholder, value in app_inputs['placeholder_map'].items():
+            processed_text = processed_text.replace(f"{{{placeholder}}}", str(value))
+
+        parts = re.split(r'(<bd>|</bd>|<ins>|</ins>)', processed_text)
+        is_bold = is_underline = False
+        for part in parts:
+            if not part: continue
+            if part == "<bd>": is_bold = True
+            elif part == "</bd>": is_bold = False
+            elif part == "<ins>": is_underline = True
+            elif part == "</ins>": is_underline = False
+            else:
+                run = paragraph.add_run(part)
+                run.bold, run.underline = is_bold, is_underline
+                run.font.name = 'Arial'
+                run.font.size = Pt(11)
+
+    def add_list_item(text, level):
+        """Adds a paragraph formatted as a list item at the specified level."""
+        p = doc.add_paragraph()
+        pPr = p._p.get_or_add_pPr()
+        numPr = pPr.get_or_add_numPr()
+        numPr.get_or_add_ilvl().val = level
+        numPr.get_or_add_numId().val = num_instance_id
+        add_formatted_runs(p, text)
+        p.paragraph_format.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
+        p.paragraph_format.space_after = Pt(6)
+
+    # 3. PARSE THE PRECEDENT AND RENDER THE DOCUMENT
+    current_block_tag = None
+    lines = precedent_content.splitlines()
+
+    for line in lines:
+        stripped_line = line.strip()
+
+        # Check for block tags first to update the current state
+        match_start_tag = re.match(r'\[(indiv|corp|a[1-4]|u[1-4])\]', stripped_line)
+        match_end_tag = re.match(r'\[/(indiv|corp|a[1-4]|u[1-4])\]', stripped_line)
+
+        if match_start_tag:
+            current_block_tag = match_start_tag.group(1)
+            continue
+        if match_end_tag:
+            current_block_tag = None
+            continue
+        
+        # Determine if the current block should be rendered
+        should_render = True
+        if current_block_tag:
+            tag = current_block_tag
+            claim_assigned = app_inputs['claim_assigned']
+            selected_track = app_inputs['selected_track']
             
-            def add_list_item(level, text):
-                p = doc.add_paragraph()
-                pPr = p._p.get_or_add_pPr()
-                numPr = pPr.get_or_add_numPr()
-                numPr.get_or_add_ilvl().val = level
-                numPr.get_or_add_numId().val = num_instance_id
-                add_formatted_runs(p, text, placeholder_map)
-                p.paragraph_format.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
-                p.paragraph_format.space_after = Pt(6)
+            tag_map = {
+                'a1': (True, "Small Claims Track"), 'a2': (True, "Fast Track"), 'a3': (True, "Intermediate Track"), 'a4': (True, "Multi Track"),
+                'u1': (False, "Small Claims Track"), 'u2': (False, "Fast Track"), 'u3': (False, "Intermediate Track"), 'u4': (False, "Multi Track")
+            }
+            
+            if tag in ['indiv', 'corp']:
+                should_render = (tag == 'indiv' and app_inputs['client_type'] == 'Individual') or \
+                                (tag == 'corp' and app_inputs['client_type'] == 'Corporate')
+            elif tag in tag_map:
+                expected_assignment, expected_track = tag_map[tag]
+                should_render = (claim_assigned == expected_assignment and selected_track == expected_track)
 
-            if element['type'] == 'blank_line': continue
-            elif element['type'] == 'fee_table':
-                for fee_line in element['content_lines']: add_list_item(0, fee_line)
-            elif element['type'] == 'heading':
-                p = doc.add_paragraph()
-                add_formatted_runs(p, f"<ins>{content}</ins>", placeholder_map)
-                p.paragraph_format.space_before = Pt(12)
-                p.paragraph_format.space_after = Pt(6)
-            elif element['type'] == 'numbered_list_item': add_list_item(0, content)
-            elif element['type'] == 'letter_list_item': add_list_item(1, content)
-            elif element['type'] == 'roman_list_item': add_list_item(2, content)
-            elif element['type'] == 'general_paragraph':
-                p = doc.add_paragraph()
-                cleaned_content = content.replace('[ind]', '').strip()
-                if '[ind]' in content: p.paragraph_format.left_indent = Cm(INDENT_FOR_IND_TAG_CM)
-                add_formatted_runs(p, cleaned_content, placeholder_map)
-                p.paragraph_format.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
-                p.paragraph_format.space_after = Pt(12)
-        return doc
-    except Exception as e:
-        logger.error(f"Error processing precedent text: {e}", exc_info=True)
-        raise
+        if not should_render:
+            continue
 
+        # Process the visible content line
+        if not stripped_line:
+            continue # Skip blank lines from precedent
+        
+        match_heading = re.match(r'^<ins>(.*)</ins>$', stripped_line)
+        match_numbered_list = re.match(r'^(\d+)\.\s*(.*)', stripped_line)
+        match_letter_list = re.match(r'^<a>\s*(.*)', stripped_line)
+        match_roman_list = re.match(r'^<i>\s*(.*)', stripped_line)
+
+        if stripped_line == '[FEE_TABLE_PLACEHOLDER]':
+            for fee_line in app_inputs['fee_table']:
+                add_list_item(fee_line, level=0)
+        elif match_heading:
+            p = doc.add_paragraph()
+            add_formatted_runs(p, f"<ins>{match_heading.group(1)}</ins>")
+            p.paragraph_format.space_before = Pt(12)
+            p.paragraph_format.space_after = Pt(6)
+        elif match_numbered_list:
+            add_list_item(match_numbered_list.group(2), level=0)
+        elif match_letter_list:
+            add_list_item(match_letter_list.group(1), level=1)
+        elif match_roman_list:
+            add_list_item(match_roman_list.group(1), level=2)
+        else:
+            p = doc.add_paragraph()
+            cleaned_content = line.replace('[ind]', '').strip()
+            if '[ind]' in line:
+                p.paragraph_format.left_indent = Cm(INDENT_FOR_IND_TAG_CM)
+            add_formatted_runs(p, cleaned_content)
+            p.paragraph_format.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
+            p.paragraph_format.space_after = Pt(12)
+    
+    return doc
+
+def generate_initial_advice_doc(app_inputs):
+    """Generates the initial advice summary document."""
+    doc = Document()
+    doc.styles['Normal'].font.name, doc.styles['Normal'].font.size = 'Arial', Pt(11)
+    p = doc.add_paragraph()
+    add_formatted_runs(p, "Initial Advice Summary - Matter Number: {matter_number}", app_inputs['placeholder_map'])
+    p.paragraph_format.space_after = Pt(12)
+    table = doc.add_table(rows=3, cols=2)
+    table.style = 'Table Grid'
+    advice_date = app_inputs['initial_advice_date'].strftime('%d/%m/%Y') if app_inputs.get('initial_advice_date') else ''
+    rows_data = [
+        ("Date of Advice", advice_date),
+        ("Method of Advice", app_inputs.get('initial_advice_method', '')),
+        ("Advice Given", app_inputs.get('initial_advice_content', ''))
+    ]
+    for i, (label, value) in enumerate(rows_data):
+        table.rows[i].cells[0].text = label
+        table.rows[i].cells[1].text = value
+    
+    doc_io = io.BytesIO()
+    doc.save(doc_io)
+    doc_io.seek(0)
+    return doc_io
+
+# --- Streamlit UI ---
 st.set_page_config(layout="wide", page_title="Ramsdens Client Care Letter Generator")
 st.title("Ramsdens Client Care Letter Generator")
 
-firm_details, precedent_content = load_firm_details(), load_precedent_text()
-if not precedent_content: st.stop()
+firm_details = load_firm_details()
+precedent_content = load_precedent_text()
+if not precedent_content:
+    st.stop()
 
 with st.form("input_form"):
     st.header("1. Letter & Client Details")
@@ -255,7 +250,6 @@ with st.form("input_form"):
         letter_date = st.date_input("Letter Date", datetime.today())
     with c2:
         client_name_input = st.text_input("Client Full Name / Company Name", "Mr. John Smith")
-        client_salutation_name = st.text_input("Salutation (for 'Dear ...' and address block)", "Mr. Smith")
         client_address_line1 = st.text_input("Address Line 1", "123 Example Street")
         client_address_line2 = st.text_input("Address Line 2 (optional)", "SomeTown")
         client_postcode = st.text_input("Postcode", "EX4 MPL")
@@ -270,7 +264,7 @@ with st.form("input_form"):
         initial_advice_date = st.date_input("Date", datetime.today())
     with c2:
         st.subheader("Case Track")
-        claim_assigned_input = st.radio("Is claim already assigned?", ("Yes", "No"), horizontal=True, index=1)
+        claim_assigned_input = st.radio("Is claim already assigned?", ("No", "Yes"), horizontal=True)
         selected_track = st.selectbox("Which track applies?", ["Small Claims Track", "Fast Track", "Intermediate Track", "Multi Track"])
 
     st.header("3. Dynamic Content")
@@ -279,53 +273,75 @@ with st.form("input_form"):
     qu3_timescales = st.text_area("Estimated Timescales", "approx two to four weeks...", height=100)
     
     st.subheader("Estimated Initial Costs")
-    hourly_rate = st.number_input("Your Hourly Rate (£)", 295)
+    hourly_rate = st.number_input("Your Hourly Rate (£)", value=295, step=5)
     cost_type_is_range = st.toggle("Use a cost range", True)
     if cost_type_is_range:
-        lower_cost = st.number_input("Lower £", float(hourly_rate * 2))
-        upper_cost = st.number_input("Upper £", float(hourly_rate * 3))
+        lower_cost = st.number_input("Lower £", value=int(hourly_rate * 2))
+        upper_cost = st.number_input("Upper £", value=int(hourly_rate * 3))
     else:
-        fixed_cost = st.number_input("Fixed cost £", float(hourly_rate * 2.5))
+        fixed_cost = st.number_input("Fixed cost £", value=int(hourly_rate * 2.5))
 
     submitted = st.form_submit_button("Generate Documents")
 
 if submitted:
-    costs_text = (f"£{lower_cost:,.2f} to £{upper_cost:,.2f} plus VAT" if cost_type_is_range else f"a fixed fee of £{fixed_cost:,.2f} plus VAT")
+    # 1. Collate all inputs
+    costs_text = (f"£{lower_cost:,.2f} to £{upper_cost:,.2f} plus VAT" if cost_type_is_range 
+                  else f"a fixed fee of £{fixed_cost:,.2f} plus VAT")
+    
+    roles = [("Partner", hourly_rate * 1.5), ("Senior Associate", hourly_rate), 
+             ("Associate", hourly_rate * 0.8), ("Trainee", hourly_rate * 0.5)]
+    fee_table = [f"{role}: £{rate:,.2f} per hour (excl. VAT)" for role, rate in roles]
+
     app_inputs = {
-        'qu1_dispute_nature': sanitize_input(qu1_dispute_nature), 'qu2_initial_steps': sanitize_input(qu2_initial_steps),
-        'qu3_timescales': sanitize_input(qu3_timescales), 'qu4_initial_costs_estimate': costs_text,
-        'fee_table': generate_fee_table(hourly_rate), 'client_type': client_type,
-        'claim_assigned': claim_assigned_input == "Yes", 'selected_track': selected_track,
-        'our_ref': sanitize_input(our_ref), 'your_ref': sanitize_input(your_ref),
-        'letter_date': letter_date.strftime('%d %B %Y'), 'client_name_input': sanitize_input(client_name_input),
-        'client_salutation': sanitize_input(client_salutation_name),
+        'client_type': client_type,
+        'claim_assigned': claim_assigned_input == "Yes",
+        'selected_track': selected_track,
+        'fee_table': fee_table,
+        'initial_advice_content': initial_advice_content, 
+        'initial_advice_method': initial_advice_method,
+        'initial_advice_date': initial_advice_date
+    }
+    
+    placeholder_map = {
+        'matter_number': sanitize_input(our_ref),
+        'your_ref': sanitize_input(your_ref),
+        'letter_date': letter_date.strftime('%d %B %Y'),
+        'client_name_input': sanitize_input(client_name_input),
         'client_address_line1': sanitize_input(client_address_line1),
         'client_address_line2_conditional': sanitize_input(client_address_line2) if client_address_line2 else "",
-        'client_postcode': sanitize_input(client_postcode), 'name': sanitize_input(firm_details["person_responsible_name"]),
-        'initial_advice_content': initial_advice_content, 'initial_advice_method': initial_advice_method,
-        'initial_advice_date': initial_advice_date, 'firm_details': firm_details
+        'client_postcode': sanitize_input(client_postcode),
+        'qu1_dispute_nature': sanitize_input(qu1_dispute_nature),
+        'qu2_initial_steps': sanitize_input(qu2_initial_steps),
+        'qu3_timescales': sanitize_input(qu3_timescales),
+        'qu4_initial_costs_estimate': costs_text,
+        'name': sanitize_input(firm_details["person_responsible_name"]),
     }
-    placeholder_map = get_placeholder_map(app_inputs, firm_details)
+    placeholder_map.update(firm_details)
+    app_inputs['placeholder_map'] = placeholder_map
+
+    # 2. Generate documents
     try:
-        doc = process_precedent_text(precedent_content, app_inputs, placeholder_map)
+        care_letter_doc = generate_client_care_document(precedent_content, app_inputs)
+        
+        # Save care letter to a memory buffer
         client_care_doc_io = io.BytesIO()
-        doc.save(client_care_doc_io)
+        care_letter_doc.save(client_care_doc_io)
         client_care_doc_io.seek(0)
         
-        advice_doc_io = generate_initial_advice_doc(app_inputs, placeholder_map)
+        # Generate advice note
+        advice_doc_io = generate_initial_advice_doc(app_inputs)
         
+        # Create Zip file
         client_name_safe = re.sub(r'[^\w\s-]', '', client_name_input).strip().replace(' ', '_')
         zip_io = io.BytesIO()
-
         with zipfile.ZipFile(zip_io, 'w', zipfile.ZIP_DEFLATED) as zipf:
             zipf.writestr(f"Client_Care_Letter_{client_name_safe}.docx", client_care_doc_io.getvalue())
-            if advice_doc_io: 
-                zipf.writestr(f"Initial_Advice_Summary_{client_name_safe}.docx", advice_doc_io.getvalue())
-        
+            zipf.writestr(f"Initial_Advice_Summary_{client_name_safe}.docx", advice_doc_io.getvalue())
         zip_io.seek(0)
-        st.success("Documents Generated Successfully!")
+        
+        st.success("✅ Documents Generated Successfully!")
         st.download_button("Download All Documents as ZIP", zip_io, f"Client_Docs_{client_name_safe}.zip", "application/zip")
 
     except Exception as e:
-        st.error(f"An error occurred while building the documents: {e}")
+        st.error(f"An error occurred: {e}")
         logger.exception("Error during document generation:")
