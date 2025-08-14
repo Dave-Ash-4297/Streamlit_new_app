@@ -29,6 +29,29 @@ def sanitize_input(text):
         text = str(text)
     return html.escape(text)
 
+def add_formatted_runs(paragraph, text_line, placeholder_map):
+    """
+    Adds text to a paragraph, handling placeholders, bold, and underline tags.
+    This is now a top-level function accessible by all document generators.
+    """
+    processed_text = text_line
+    for placeholder, value in placeholder_map.items():
+        processed_text = processed_text.replace(f"{{{placeholder}}}", str(value))
+
+    parts = re.split(r'(<bd>|</bd>|<ins>|</ins>)', processed_text)
+    is_bold = is_underline = False
+    for part in parts:
+        if not part: continue
+        if part == "<bd>": is_bold = True
+        elif part == "</bd>": is_bold = False
+        elif part == "<ins>": is_underline = True
+        elif part == "</ins>": is_underline = False
+        else:
+            run = paragraph.add_run(part)
+            run.bold, run.underline = is_bold, is_underline
+            run.font.name = 'Arial'
+            run.font.size = Pt(11)
+
 # --- Data Loading ---
 @st.cache_data
 def load_firm_details():
@@ -60,7 +83,6 @@ def load_precedent_text():
 def generate_client_care_document(precedent_content, app_inputs):
     """
     Parses the precedent text and generates a .docx file in memory.
-    This function has been refactored for simplicity and reliability.
     """
     
     # 1. SETUP THE DOCUMENT AND NUMBERING
@@ -101,28 +123,9 @@ def generate_client_care_document(precedent_content, app_inputs):
         numbering_element.append(num)
 
     setup_numbering_style(numbering_elm)
+    placeholder_map = app_inputs['placeholder_map']
 
-    # 2. HELPER FUNCTIONS FOR ADDING CONTENT
-    def add_formatted_runs(paragraph, text_line):
-        """Adds text to a paragraph, handling bold and underline tags."""
-        processed_text = text_line
-        for placeholder, value in app_inputs['placeholder_map'].items():
-            processed_text = processed_text.replace(f"{{{placeholder}}}", str(value))
-
-        parts = re.split(r'(<bd>|</bd>|<ins>|</ins>)', processed_text)
-        is_bold = is_underline = False
-        for part in parts:
-            if not part: continue
-            if part == "<bd>": is_bold = True
-            elif part == "</bd>": is_bold = False
-            elif part == "<ins>": is_underline = True
-            elif part == "</ins>": is_underline = False
-            else:
-                run = paragraph.add_run(part)
-                run.bold, run.underline = is_bold, is_underline
-                run.font.name = 'Arial'
-                run.font.size = Pt(11)
-
+    # 2. HELPER FUNCTION FOR ADDING LIST ITEMS
     def add_list_item(text, level):
         """Adds a paragraph formatted as a list item at the specified level."""
         p = doc.add_paragraph()
@@ -130,7 +133,7 @@ def generate_client_care_document(precedent_content, app_inputs):
         numPr = pPr.get_or_add_numPr()
         numPr.get_or_add_ilvl().val = level
         numPr.get_or_add_numId().val = num_instance_id
-        add_formatted_runs(p, text)
+        add_formatted_runs(p, text, placeholder_map)
         p.paragraph_format.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
         p.paragraph_format.space_after = Pt(6)
 
@@ -141,7 +144,6 @@ def generate_client_care_document(precedent_content, app_inputs):
     for line in lines:
         stripped_line = line.strip()
 
-        # Check for block tags first to update the current state
         match_start_tag = re.match(r'\[(indiv|corp|a[1-4]|u[1-4])\]', stripped_line)
         match_end_tag = re.match(r'\[/(indiv|corp|a[1-4]|u[1-4])\]', stripped_line)
 
@@ -152,7 +154,6 @@ def generate_client_care_document(precedent_content, app_inputs):
             current_block_tag = None
             continue
         
-        # Determine if the current block should be rendered
         should_render = True
         if current_block_tag:
             tag = current_block_tag
@@ -174,9 +175,8 @@ def generate_client_care_document(precedent_content, app_inputs):
         if not should_render:
             continue
 
-        # Process the visible content line
         if not stripped_line:
-            continue # Skip blank lines from precedent
+            continue
         
         match_heading = re.match(r'^<ins>(.*)</ins>$', stripped_line)
         match_numbered_list = re.match(r'^(\d+)\.\s*(.*)', stripped_line)
@@ -188,7 +188,7 @@ def generate_client_care_document(precedent_content, app_inputs):
                 add_list_item(fee_line, level=0)
         elif match_heading:
             p = doc.add_paragraph()
-            add_formatted_runs(p, f"<ins>{match_heading.group(1)}</ins>")
+            add_formatted_runs(p, f"<ins>{match_heading.group(1)}</ins>", placeholder_map)
             p.paragraph_format.space_before = Pt(12)
             p.paragraph_format.space_after = Pt(6)
         elif match_numbered_list:
@@ -202,7 +202,7 @@ def generate_client_care_document(precedent_content, app_inputs):
             cleaned_content = line.replace('[ind]', '').strip()
             if '[ind]' in line:
                 p.paragraph_format.left_indent = Cm(INDENT_FOR_IND_TAG_CM)
-            add_formatted_runs(p, cleaned_content)
+            add_formatted_runs(p, cleaned_content, placeholder_map)
             p.paragraph_format.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
             p.paragraph_format.space_after = Pt(12)
     
