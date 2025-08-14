@@ -1,14 +1,3 @@
-Of course\! I can certainly help you update your Streamlit app.
-
-The issue preventing the full document from being rendered lies within the `preprocess_precedent` function. The original logic was incorrectly treating the conditional tags (e.g., `[u1]`, `[/corp]`) as general paragraph content instead of just markers for conditional blocks. This likely caused the processing to halt or behave unpredictably.
-
-I've corrected this by restructuring the logic to ensure these tags are used only to define the context for the lines that follow them, and are not themselves added to the document as content. The logic for correctly selecting the conditional blocks based on your UI inputs (`should_render_track_block`) was already correct and has been preserved.
-
-Here is the updated and complete code for your `streamlit_app.py` file. Simply replace the entire content of your existing file with the code below.
-
-### Updated `streamlit_app.py`
-
-```python
 import streamlit as st
 from docx import Document
 from docx.shared import Pt, Cm
@@ -340,4 +329,3 @@ if submitted:
     except Exception as e:
         st.error(f"An error occurred while building the documents: {e}")
         logger.exception("Error during document generation:")
-```
