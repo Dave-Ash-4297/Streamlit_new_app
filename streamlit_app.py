@@ -241,6 +241,25 @@ precedent_content = load_precedent_text()
 if not precedent_content:
     st.stop()
 
+# --- NEW: Initialize session state for cost hours ---
+if 'lower_hours' not in st.session_state:
+    st.session_state.lower_hours = 2.0
+if 'upper_hours' not in st.session_state:
+    st.session_state.upper_hours = 3.0
+if 'fixed_hours' not in st.session_state:
+    st.session_state.fixed_hours = 2.5
+
+# --- NEW: Callback functions for buttons ---
+def increment(key):
+    """Increments the specified session state key by 0.5 hours."""
+    st.session_state[key] += 0.5
+
+def decrement(key):
+    """Decrements the specified session state key by 0.5 hours, with a minimum of 0."""
+    if st.session_state[key] > 0:
+        st.session_state[key] -= 0.5
+
+
 with st.form("input_form"):
     st.header("1. Letter & Client Details")
     c1, c2 = st.columns(2)
@@ -272,22 +291,61 @@ with st.form("input_form"):
     qu2_initial_steps = st.text_area('Initial Work', "^Per our recent discussions^ we agreed I would review documentation", height=100)
     qu3_timescales = st.text_area("Estimated Timescales", "^Start with cap and end with full stop^ The initial part of the Work will take around two to four weeks to complete and then when we have more information as to.", height=100)
     
+    # --- IMPROVED: Cost Estimation Section ---
     st.subheader("Estimated Initial Costs")
     hourly_rate = st.number_input("Your Hourly Rate (£)", value=295, step=5)
     cost_type_is_range = st.toggle("Use a cost range", True)
-    if cost_type_is_range:
-        lower_cost = st.number_input("Lower £", value=int(hourly_rate * 2))
-        upper_cost = st.number_input("Upper £", value=int(hourly_rate * 3))
-    else:
-        fixed_cost = st.number_input("Fixed cost £", value=int(hourly_rate * 2.5))
 
+    if cost_type_is_range:
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown("##### Lower Estimate")
+            b1, b2, b3 = st.columns([1, 2, 1])
+            with b1:
+                st.button("➖", key="dec_lower", on_click=decrement, args=('lower_hours',), use_container_width=True)
+            with b2:
+                cost = st.session_state.lower_hours * hourly_rate
+                st.metric(label="Hours", value=f"{st.session_state.lower_hours:.1f}", delta=f"£{cost:,.2f} + VAT")
+            with b3:
+                st.button("➕", key="inc_lower", on_click=increment, args=('lower_hours',), use_container_width=True)
+        
+        with c2:
+            st.markdown("##### Upper Estimate")
+            b1, b2, b3 = st.columns([1, 2, 1])
+            with b1:
+                st.button("➖", key="dec_upper", on_click=decrement, args=('upper_hours',), use_container_width=True)
+            with b2:
+                cost = st.session_state.upper_hours * hourly_rate
+                st.metric(label="Hours", value=f"{st.session_state.upper_hours:.1f}", delta=f"£{cost:,.2f} + VAT")
+            with b3:
+                st.button("➕", key="inc_upper", on_click=increment, args=('upper_hours',), use_container_width=True)
+    else:
+        st.markdown("##### Fixed Fee Estimate")
+        # Use columns to constrain the width for a better look
+        _, c, _ = st.columns([1, 2, 1])
+        with c:
+            b1, b2, b3 = st.columns([1, 2, 1])
+            with b1:
+                st.button("➖", key="dec_fixed", on_click=decrement, args=('fixed_hours',), use_container_width=True)
+            with b2:
+                cost = st.session_state.fixed_hours * hourly_rate
+                st.metric(label="Hours", value=f"{st.session_state.fixed_hours:.1f}", delta=f"£{cost:,.2f} + VAT")
+            with b3:
+                st.button("➕", key="inc_fixed", on_click=increment, args=('fixed_hours',), use_container_width=True)
+    
     submitted = st.form_submit_button("Generate Documents")
 
 if submitted:
     # 1. Collate all inputs
-    costs_text = (f"£{lower_cost:,.2f} to £{upper_cost:,.2f} plus VAT" if cost_type_is_range 
-                  else f"a fixed fee of £{fixed_cost:,.2f} plus VAT")
-    
+    # --- IMPROVED: Calculate costs based on session state hours ---
+    if cost_type_is_range:
+        lower_cost = st.session_state.lower_hours * hourly_rate
+        upper_cost = st.session_state.upper_hours * hourly_rate
+        costs_text = f"£{lower_cost:,.2f} to £{upper_cost:,.2f} plus VAT"
+    else:
+        fixed_cost = st.session_state.fixed_hours * hourly_rate
+        costs_text = f"a fixed fee of £{fixed_cost:,.2f} plus VAT"
+
     roles = [("Partner", hourly_rate * 1.5), ("Senior Associate", hourly_rate), 
              ("Associate", hourly_rate * 0.8), ("Trainee", hourly_rate * 0.5)]
     fee_table = [f"{role}: £{rate:,.2f} per hour (excl. VAT)" for role, rate in roles]
@@ -313,7 +371,7 @@ if submitted:
         'qu1_dispute_nature': sanitize_input(qu1_dispute_nature),
         'qu2_initial_steps': sanitize_input(qu2_initial_steps),
         'qu3_timescales': sanitize_input(qu3_timescales),
-        'qu4_initial_costs_estimate': costs_text,
+        'qu4_initial_costs_estimate': costs_text, # Use the dynamically created text
         'name': sanitize_input(firm_details["person_responsible_name"]),
     }
     placeholder_map.update(firm_details)
