@@ -268,9 +268,9 @@ with st.form("input_form"):
         selected_track = st.selectbox("Which track applies?", ["Small Claims Track", "Fast Track", "Intermediate Track", "Multi Track"])
 
     st.header("3. Dynamic Content")
-    qu1_dispute_nature = st.text_area('Dispute Nature', "a contractual matter...", height=75)
-    qu2_initial_steps = st.text_area('Initial Work', "review documentation...", height=100)
-    qu3_timescales = st.text_area("Estimated Timescales", "approx two to four weeks...", height=100)
+    qu1_dispute_nature = st.text_area('Dispute Nature', "a contractual matter ^lower case to start and end^", height=75)
+    qu2_initial_steps = st.text_area('Initial Work', "^Per our recent discussions^ we agreed I would review documentation", height=100)
+    qu3_timescales = st.text_area("Estimated Timescales", "^Start with cap and end with full stop^ The initial part of the Work will take around two to four weeks to complete and then when we have more information as to.", height=100)
     
     st.subheader("Estimated Initial Costs")
     hourly_rate = st.number_input("Your Hourly Rate (£)", value=295, step=5)
