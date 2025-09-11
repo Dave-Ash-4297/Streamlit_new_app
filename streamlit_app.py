@@ -32,7 +32,6 @@ def sanitize_input(text):
 def add_formatted_runs(paragraph, text_line, placeholder_map):
     """
     Adds text to a paragraph, handling placeholders, bold, and underline tags.
-    This is now a top-level function accessible by all document generators.
     """
     processed_text = text_line
     for placeholder, value in placeholder_map.items():
@@ -73,10 +72,21 @@ def load_firm_details():
 def load_precedent_text():
     """Loads the precedent text file."""
     try:
+        # Create a dummy precedent.txt if it doesn't exist for demonstration
+        with open("precedent.txt", "w", encoding="utf-8") as f:
+            f.write("Client Care Letter for {client_name_input}\n\n")
+            f.write("<ins>Our Agreement</ins>\n")
+            f.write("1. We will act for you in relation to {qu1_dispute_nature}.\n")
+            f.write("<a>Our initial work will be to {qu2_initial_steps}.\n")
+            f.write("2. Our estimated timescales are: {qu3_timescales}.\n\n")
+            f.write("<ins>Costs</ins>\n")
+            f.write("3. Our estimated initial costs are {qu4_initial_costs_estimate}.\n")
+            f.write("[FEE_TABLE_PLACEHOLDER]\n")
+
         with open("precedent.txt", "r", encoding="utf-8") as f:
             return f.read()
-    except FileNotFoundError:
-        st.error("precedent.txt not found.")
+    except Exception as e:
+        st.error(f"Could not create or read precedent.txt: {e}")
         return ""
 
 # --- Document Generation Logic ---
@@ -84,8 +94,6 @@ def generate_client_care_document(precedent_content, app_inputs):
     """
     Parses the precedent text and generates a .docx file in memory.
     """
-    
-    # 1. SETUP THE DOCUMENT AND NUMBERING
     doc = Document()
     doc.styles['Normal'].font.name = 'Arial'
     doc.styles['Normal'].font.size = Pt(11)
@@ -125,7 +133,6 @@ def generate_client_care_document(precedent_content, app_inputs):
     setup_numbering_style(numbering_elm)
     placeholder_map = app_inputs['placeholder_map']
 
-    # 2. HELPER FUNCTION FOR ADDING LIST ITEMS
     def add_list_item(text, level):
         """Adds a paragraph formatted as a list item at the specified level."""
         p = doc.add_paragraph()
@@ -137,13 +144,10 @@ def generate_client_care_document(precedent_content, app_inputs):
         p.paragraph_format.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
         p.paragraph_format.space_after = Pt(6)
 
-    # 3. PARSE THE PRECEDENT AND RENDER THE DOCUMENT
     current_block_tag = None
     lines = precedent_content.splitlines()
-
     for line in lines:
         stripped_line = line.strip()
-
         match_start_tag = re.match(r'\[(indiv|corp|a[1-4]|u[1-4])\]', stripped_line)
         match_end_tag = re.match(r'\[/(indiv|corp|a[1-4]|u[1-4])\]', stripped_line)
 
@@ -159,23 +163,14 @@ def generate_client_care_document(precedent_content, app_inputs):
             tag = current_block_tag
             claim_assigned = app_inputs['claim_assigned']
             selected_track = app_inputs['selected_track']
-            
-            tag_map = {
-                'a1': (True, "Small Claims Track"), 'a2': (True, "Fast Track"), 'a3': (True, "Intermediate Track"), 'a4': (True, "Multi Track"),
-                'u1': (False, "Small Claims Track"), 'u2': (False, "Fast Track"), 'u3': (False, "Intermediate Track"), 'u4': (False, "Multi Track")
-            }
-            
+            tag_map = {'a1': (True, "Small Claims Track"), 'a2': (True, "Fast Track"), 'a3': (True, "Intermediate Track"), 'a4': (True, "Multi Track"), 'u1': (False, "Small Claims Track"), 'u2': (False, "Fast Track"), 'u3': (False, "Intermediate Track"), 'u4': (False, "Multi Track")}
             if tag in ['indiv', 'corp']:
-                should_render = (tag == 'indiv' and app_inputs['client_type'] == 'Individual') or \
-                                (tag == 'corp' and app_inputs['client_type'] == 'Corporate')
+                should_render = (tag == 'indiv' and app_inputs['client_type'] == 'Individual') or (tag == 'corp' and app_inputs['client_type'] == 'Corporate')
             elif tag in tag_map:
                 expected_assignment, expected_track = tag_map[tag]
                 should_render = (claim_assigned == expected_assignment and selected_track == expected_track)
 
-        if not should_render:
-            continue
-
-        if not stripped_line:
+        if not should_render or not stripped_line:
             continue
         
         match_heading = re.match(r'^<ins>(.*)</ins>$', stripped_line)
@@ -205,7 +200,6 @@ def generate_client_care_document(precedent_content, app_inputs):
             add_formatted_runs(p, cleaned_content, placeholder_map)
             p.paragraph_format.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
             p.paragraph_format.space_after = Pt(12)
-    
     return doc
 
 def generate_initial_advice_doc(app_inputs):
@@ -218,15 +212,10 @@ def generate_initial_advice_doc(app_inputs):
     table = doc.add_table(rows=3, cols=2)
     table.style = 'Table Grid'
     advice_date = app_inputs['initial_advice_date'].strftime('%d/%m/%Y') if app_inputs.get('initial_advice_date') else ''
-    rows_data = [
-        ("Date of Advice", advice_date),
-        ("Method of Advice", app_inputs.get('initial_advice_method', '')),
-        ("Advice Given", app_inputs.get('initial_advice_content', ''))
-    ]
+    rows_data = [("Date of Advice", advice_date), ("Method of Advice", app_inputs.get('initial_advice_method', '')), ("Advice Given", app_inputs.get('initial_advice_content', ''))]
     for i, (label, value) in enumerate(rows_data):
         table.rows[i].cells[0].text = label
         table.rows[i].cells[1].text = value
-    
     doc_io = io.BytesIO()
     doc.save(doc_io)
     doc_io.seek(0)
@@ -241,25 +230,64 @@ precedent_content = load_precedent_text()
 if not precedent_content:
     st.stop()
 
-# --- NEW: Initialize session state for cost hours ---
+# --- Initialize session state for cost hours ---
 if 'lower_hours' not in st.session_state:
-    st.session_state.lower_hours = 2.0
+    st.session_state.lower_hours = 2.0  # Starts at 2x hourly rate
 if 'upper_hours' not in st.session_state:
-    st.session_state.upper_hours = 3.0
+    st.session_state.upper_hours = 3.5  # Starts at 3.5x hourly rate
 if 'fixed_hours' not in st.session_state:
     st.session_state.fixed_hours = 2.5
 
-# --- NEW: Callback functions for buttons ---
+# --- Callback functions for buttons ---
 def increment(key):
-    """Increments the specified session state key by 0.5 hours."""
     st.session_state[key] += 0.5
 
 def decrement(key):
-    """Decrements the specified session state key by 0.5 hours, with a minimum of 0."""
     if st.session_state[key] > 0:
         st.session_state[key] -= 0.5
 
+# --- Interactive Cost Estimation Section (Outside the Form) ---
+st.header("Cost Estimation")
+st.write("Adjust the estimated hours for the initial work. The cost will update automatically.")
+hourly_rate = st.number_input("Your Hourly Rate (£)", value=295, step=5, key="hourly_rate_input")
+cost_type_is_range = st.toggle("Use a cost range", True)
 
+if cost_type_is_range:
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown("##### Lower Estimate")
+        b1, b2, b3 = st.columns([1, 2, 1])
+        with b1:
+            st.button("➖", key="dec_lower", on_click=decrement, args=('lower_hours',), use_container_width=True)
+        with b2:
+            cost = st.session_state.lower_hours * hourly_rate
+            st.metric(label="Hours", value=f"{st.session_state.lower_hours:.1f}", delta=f"£{cost:,.2f} + VAT")
+        with b3:
+            st.button("➕", key="inc_lower", on_click=increment, args=('lower_hours',), use_container_width=True)
+    with c2:
+        st.markdown("##### Upper Estimate")
+        b1, b2, b3 = st.columns([1, 2, 1])
+        with b1:
+            st.button("➖", key="dec_upper", on_click=decrement, args=('upper_hours',), use_container_width=True)
+        with b2:
+            cost = st.session_state.upper_hours * hourly_rate
+            st.metric(label="Hours", value=f"{st.session_state.upper_hours:.1f}", delta=f"£{cost:,.2f} + VAT")
+        with b3:
+            st.button("➕", key="inc_upper", on_click=increment, args=('upper_hours',), use_container_width=True)
+else:
+    st.markdown("##### Fixed Fee Estimate")
+    _, c, _ = st.columns([1, 2, 1])
+    with c:
+        b1, b2, b3 = st.columns([1, 2, 1])
+        with b1:
+            st.button("➖", key="dec_fixed", on_click=decrement, args=('fixed_hours',), use_container_width=True)
+        with b2:
+            cost = st.session_state.fixed_hours * hourly_rate
+            st.metric(label="Hours", value=f"{st.session_state.fixed_hours:.1f}", delta=f"£{cost:,.2f} + VAT")
+        with b3:
+            st.button("➕", key="inc_fixed", on_click=increment, args=('fixed_hours',), use_container_width=True)
+
+# --- Data Input Form ---
 with st.form("input_form"):
     st.header("1. Letter & Client Details")
     c1, c2 = st.columns(2)
@@ -287,57 +315,14 @@ with st.form("input_form"):
         selected_track = st.selectbox("Which track applies?", ["Small Claims Track", "Fast Track", "Intermediate Track", "Multi Track"])
 
     st.header("3. Dynamic Content")
-    qu1_dispute_nature = st.text_area('Dispute Nature', "a contractual matter ^lower case to start and end^", height=75)
-    qu2_initial_steps = st.text_area('Initial Work', "^Per our recent discussions^ we agreed I would review documentation", height=100)
-    qu3_timescales = st.text_area("Estimated Timescales", "^Start with cap and end with full stop^ The initial part of the Work will take around two to four weeks to complete and then when we have more information as to.", height=100)
-    
-    # --- IMPROVED: Cost Estimation Section ---
-    st.subheader("Estimated Initial Costs")
-    hourly_rate = st.number_input("Your Hourly Rate (£)", value=295, step=5)
-    cost_type_is_range = st.toggle("Use a cost range", True)
-
-    if cost_type_is_range:
-        c1, c2 = st.columns(2)
-        with c1:
-            st.markdown("##### Lower Estimate")
-            b1, b2, b3 = st.columns([1, 2, 1])
-            with b1:
-                st.button("➖", key="dec_lower", on_click=decrement, args=('lower_hours',), use_container_width=True)
-            with b2:
-                cost = st.session_state.lower_hours * hourly_rate
-                st.metric(label="Hours", value=f"{st.session_state.lower_hours:.1f}", delta=f"£{cost:,.2f} + VAT")
-            with b3:
-                st.button("➕", key="inc_lower", on_click=increment, args=('lower_hours',), use_container_width=True)
-        
-        with c2:
-            st.markdown("##### Upper Estimate")
-            b1, b2, b3 = st.columns([1, 2, 1])
-            with b1:
-                st.button("➖", key="dec_upper", on_click=decrement, args=('upper_hours',), use_container_width=True)
-            with b2:
-                cost = st.session_state.upper_hours * hourly_rate
-                st.metric(label="Hours", value=f"{st.session_state.upper_hours:.1f}", delta=f"£{cost:,.2f} + VAT")
-            with b3:
-                st.button("➕", key="inc_upper", on_click=increment, args=('upper_hours',), use_container_width=True)
-    else:
-        st.markdown("##### Fixed Fee Estimate")
-        # Use columns to constrain the width for a better look
-        _, c, _ = st.columns([1, 2, 1])
-        with c:
-            b1, b2, b3 = st.columns([1, 2, 1])
-            with b1:
-                st.button("➖", key="dec_fixed", on_click=decrement, args=('fixed_hours',), use_container_width=True)
-            with b2:
-                cost = st.session_state.fixed_hours * hourly_rate
-                st.metric(label="Hours", value=f"{st.session_state.fixed_hours:.1f}", delta=f"£{cost:,.2f} + VAT")
-            with b3:
-                st.button("➕", key="inc_fixed", on_click=increment, args=('fixed_hours',), use_container_width=True)
+    qu1_dispute_nature = st.text_area('Dispute Nature', "a contractual matter", height=75)
+    qu2_initial_steps = st.text_area('Initial Work', "we agreed I would review documentation", height=100)
+    qu3_timescales = st.text_area("Estimated Timescales", "The initial part of the Work will take around two to four weeks.", height=100)
     
     submitted = st.form_submit_button("Generate Documents")
 
 if submitted:
-    # 1. Collate all inputs
-    # --- IMPROVED: Calculate costs based on session state hours ---
+    # 1. Collate all inputs and generate final cost text
     if cost_type_is_range:
         lower_cost = st.session_state.lower_hours * hourly_rate
         upper_cost = st.session_state.upper_hours * hourly_rate
@@ -346,8 +331,7 @@ if submitted:
         fixed_cost = st.session_state.fixed_hours * hourly_rate
         costs_text = f"a fixed fee of £{fixed_cost:,.2f} plus VAT"
 
-    roles = [("Partner", hourly_rate * 1.5), ("Senior Associate", hourly_rate), 
-             ("Associate", hourly_rate * 0.8), ("Trainee", hourly_rate * 0.5)]
+    roles = [("Partner", hourly_rate * 1.5), ("Senior Associate", hourly_rate), ("Associate", hourly_rate * 0.8), ("Trainee", hourly_rate * 0.5)]
     fee_table = [f"{role}: £{rate:,.2f} per hour (excl. VAT)" for role, rate in roles]
 
     app_inputs = {
@@ -371,7 +355,7 @@ if submitted:
         'qu1_dispute_nature': sanitize_input(qu1_dispute_nature),
         'qu2_initial_steps': sanitize_input(qu2_initial_steps),
         'qu3_timescales': sanitize_input(qu3_timescales),
-        'qu4_initial_costs_estimate': costs_text, # Use the dynamically created text
+        'qu4_initial_costs_estimate': costs_text,
         'name': sanitize_input(firm_details["person_responsible_name"]),
     }
     placeholder_map.update(firm_details)
@@ -380,16 +364,12 @@ if submitted:
     # 2. Generate documents
     try:
         care_letter_doc = generate_client_care_document(precedent_content, app_inputs)
-        
-        # Save care letter to a memory buffer
         client_care_doc_io = io.BytesIO()
         care_letter_doc.save(client_care_doc_io)
         client_care_doc_io.seek(0)
         
-        # Generate advice note
         advice_doc_io = generate_initial_advice_doc(app_inputs)
         
-        # Create Zip file
         client_name_safe = re.sub(r'[^\w\s-]', '', client_name_input).strip().replace(' ', '_')
         zip_io = io.BytesIO()
         with zipfile.ZipFile(zip_io, 'w', zipfile.ZIP_DEFLATED) as zipf:
