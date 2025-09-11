@@ -89,11 +89,8 @@ def load_precedent_text():
         st.error(f"Could not create or read precedent.txt: {e}")
         return ""
 
-# --- Document Generation Logic ---
+# --- Document Generation Logic (Full logic included but collapsed for brevity) ---
 def generate_client_care_document(precedent_content, app_inputs):
-    """
-    Parses the precedent text and generates a .docx file in memory.
-    """
     doc = Document()
     doc.styles['Normal'].font.name = 'Arial'
     doc.styles['Normal'].font.size = Pt(11)
@@ -102,7 +99,6 @@ def generate_client_care_document(precedent_content, app_inputs):
     abstract_num_id, num_instance_id = 10, 1
 
     def setup_numbering_style(numbering_element):
-        """Creates the multi-level list style for the document."""
         abstract_num = OxmlElement('w:abstractNum')
         abstract_num.set(qn('w:abstractNumId'), str(abstract_num_id))
 
@@ -134,7 +130,6 @@ def generate_client_care_document(precedent_content, app_inputs):
     placeholder_map = app_inputs['placeholder_map']
 
     def add_list_item(text, level):
-        """Adds a paragraph formatted as a list item at the specified level."""
         p = doc.add_paragraph()
         pPr = p._p.get_or_add_pPr()
         numPr = pPr.get_or_add_numPr()
@@ -203,7 +198,6 @@ def generate_client_care_document(precedent_content, app_inputs):
     return doc
 
 def generate_initial_advice_doc(app_inputs):
-    """Generates the initial advice summary document."""
     doc = Document()
     doc.styles['Normal'].font.name, doc.styles['Normal'].font.size = 'Arial', Pt(11)
     p = doc.add_paragraph()
@@ -246,7 +240,7 @@ def decrement(key):
     if st.session_state[key] > 0:
         st.session_state[key] -= 0.5
 
-# --- Interactive Cost Estimation Section (Outside the Form) ---
+# --- Interactive Cost Estimation Section (Placed Before the Form) ---
 st.header("Cost Estimation")
 st.write("Adjust the estimated hours for the initial work. The cost will update automatically.")
 hourly_rate = st.number_input("Your Hourly Rate (£)", value=295, step=5, key="hourly_rate_input")
@@ -319,6 +313,7 @@ with st.form("input_form"):
     qu2_initial_steps = st.text_area('Initial Work', "we agreed I would review documentation", height=100)
     qu3_timescales = st.text_area("Estimated Timescales", "The initial part of the Work will take around two to four weeks.", height=100)
     
+    # Final submit button for the form
     submitted = st.form_submit_button("Generate Documents")
 
 if submitted:
