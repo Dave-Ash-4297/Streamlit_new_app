@@ -1,14 +1,3 @@
-Here is the complete, working Streamlit application.
-
-I have made **three key changes** to fix the issues:
-
-1.  **Fixed the Download Button:** The download now uses `st.session_state` to store the generated file. This prevents the file from disappearing when you click the download button.
-2.  **Embedded `precedent.txt`:** I've pasted the full text of your `precedent.txt` file directly into the script as a string. This is much safer and more reliable than trying to read a file, especially for deployment.
-3.  **Updated Formatting:** I updated the `add_formatted_runs` function to correctly handle the `<***>...</***>` bold tags found in your precedent file.
-
-You can copy and paste this entire code block into a single file (e.g., `app.py`) and run it with `streamlit run app.py`.
-
-```python
 import streamlit as st
 from docx import Document
 from docx.shared import Pt, Cm
@@ -127,7 +116,7 @@ Dear {client_name_input},
 <i>Current UK or EEA photo-card driving licence; or
 <i>National Identity Card containing a photograph.
 [/indiv]
-1. Please note that until these identification requirements have been satisfied, we may not be able to accept any money from you or make any substantial progress with your matter. It is therefore important that you provide your documents as soon as possible to avoid any delays.
+1. Please note that until these identification requirements have been satisfied, we may not be ableto accept any money from you or make any substantial progress with your matter. It is therefore important that you provide your documents as soon as possible to avoid any delays.
 <ins>Document Preservation and Disclosure</ins>
 1. In the event that your matter is litigated before a Court, all parties will be required to give full disclosure of all material relevant to the Dispute. It is therefore essential that you preserve any and all such material that includes correspondence, documents, emails, text and SMS messages and/or other electronic communications of any sort. Your disclosure obligations include an obligation to disclose material that may harm your case or help your opponent’s case, as well as those on which you may rely or which help. If any device on which any such material is stored is to be disposed of or ceases to be used, you must ensure that copies are kept of the material.
 <ins>People Responsible For Your Case</ins>
@@ -186,7 +175,7 @@ Dear {client_name_input},
 1. From the information that you have supplied us with, the claim has already been allocated to the Multi-Track which is the normal track for claims with a monetary value of over £100,000. Having been allocated to the Multi-Track, this means that the fixed costs regime does not apply to your/your opponent’s claim and the general rule that the ‘loser pays the winner’s costs’ will apply, subject to any costs budgeting that has been implemented by the Court and the caveats set out above under the heading <***>Section 74 Solicitors Act 1974 Agreement & Recovery of Costs</***>.
 [/a4]
 [u1]
-1. From the information that you have supplied us with, it is likely that were Court proceedings to be commenced, the claim would be allocated to the Small Claims Track which is the normal track for claims with a monetary value of £10,0D00 or less. Upon allocation to the Small Claims Track, the normal rule is that only the following limited costs are recoverable by a successful party:
+1. From the information that you have supplied us with, it is likely that were Court proceedings to be commenced, the claim would be allocated to the Small Claims Track which is the normal track for claims with a monetary value of £10,00D00 or less. Upon allocation to the Small Claims Track, the normal rule is that only the following limited costs are recoverable by a successful party:
 <a>Any Court fees paid.
 <a>Fixed issue costs ranging between £50 and £125.
 <a>Loss of earnings not exceeding £95 per person per day.
@@ -208,7 +197,7 @@ Dear {client_name_input},
 1. It is always difficult to give an indication of the likely costs to be incurred in cases of this type. This is because it is impossible to say at this stage when the case may be brought to a conclusion and the amount of work that may be required to reach that point. The vast majority of cases are settled without the need for Court proceedings and of those where Court proceedings are commenced, the majority are settled without a trial. The actual amount of costs to be incurred will depend upon the arguments being advanced and the amount and nature of the evidence involved. The more evidence that is required, the greater the amount of time that will be spent on it by the parties and the Court and, therefore, the greater the costs.
 1. The involvement of expert evidence (such as in the form of valuation evidence) will also contribute to an increase in the costs involved.
 1. In the event that it may appear that our initial estimate of costs may be exceeded, we will notify you of these changes. We will review our estimate of costs at least every six months.
-1. There may be occasions during the conduct of your case where significant disbursements or major amounts of chargeable time are due to be incurred. We reserve the right to seek payment in advance for these commitments, and routinely do so. In the event that we do seek such payment in advance and it is not made by any reasonable deadline set, we reserve the right to cease acting for you in this matter. In the event that we do cease to act we would attempt to mitigate the impact that doing so would have on your case but it is possible that your case may be prejudiced as a result. We also reserve the right to cease acting for you in the event that any bills rendered to you are not paid within the timescale required.
+1. There may be occasions during the conduct of your case where significant disbursements or major amounts of chargeable time are due to be incurred. We reserve the right to seek payment in advance for these commitments, and routinely do so. In the event that we do seek such payment in advance and it is not made by any reasonable deadline set, we reserve the right to cease acting for you in this matter. In the event that we do cease to act we would attempt to mitigate the impact that doing so would have on your case but it is possible that your case may be prejudiced as a Zresult. We also reserve the right to cease acting for you in the event that any bills rendered to you are not paid within the timescale required.
 1. To this extent, you agree with us that our retainer in this matter is not to be considered an entire agreement, such that we are not obliged to continue acting for you to the conclusion of the matter and are entitled to terminate your retainer before your case is concluded. We are required to make this clear because there has been legal authority that in the absence of such clarity a firm was required to continue acting in a case where they were no longer being funded to do so.
 1. You have a right to ask for your overall cost to be limited to a maximum and we trust you will liaise with us if you wish to limit your costs. We will not then exceed this limit without first obtaining your consent. However this does mean that your case may not be concluded if we have reached your cost limit.
 1. In Court or some Tribunal proceedings, you may be ordered to pay the costs of someone else, either in relation to the whole of the costs of the case if you are unsuccessful or in relation to some part or issue in the case. Also, you may be ordered to pay the costs of another party during the course of proceedings in relation to a particular application to the Court. In such case you will need to provide this firm with funds to discharge such liability within seven days as failure to do so may prevent your case progressing. Please be aware that once we issue a Court or certain Tribunal claims or counterclaim on your behalf, you are generally unable to discontinue your claim or counterclaim without paying the costs of your opponent unless an agreement on costs is reached.
@@ -576,4 +565,3 @@ if "zip_buffer" in st.session_state and st.session_state.zip_buffer is not None:
         # Clear the state after download so the button disappears
         on_click=lambda: st.session_state.pop("zip_buffer", None)
     )
-```
