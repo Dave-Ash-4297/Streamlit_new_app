@@ -70,7 +70,7 @@ def load_firm_details():
         "person_responsible_name": "Paul Pinder", "person_responsible_title": "Senior Associate",
         "supervisor_name": "Nick Armitage", "supervisor_title": "Partner",
         "person_responsible_phone": "01484 821558", "person_responsible_mobile": "07923 250815",
-        "person_responsible_email": "paul.pinder@ramsdens.co.uk", "assistant_name": "Reece Collier",
+        "person_responsible_email": "paul.pinder@ramsdens.co.uk", "assistant_name": "Tom Adamthwaite",
         "supervisor_contact_for_complaints": "Nick Armitage on 01484 507121", "bank_name": "Barclays Bank PLC",
         "bank_address": "17 Market Place, Huddersfield", "account_name": "Ramsdens Solicitors LLP Client Account",
         "sort_code": "20-43-12", "account_number": "03909026",
